@@ -42,11 +42,24 @@ const ADMIN_CSS = `
 .pill.acc{background:#fdecea;color:#b3261e;border-color:#f5c6c0}
 .loading{text-align:center;color:var(--fg2);padding:34px}
 
+/* 登录门禁 */
+.login-box{max-width:420px;margin:40px auto;padding:32px;background:#fff;border:1px solid var(--line);border-radius:var(--radius);text-align:center}
+.login-box .h1{margin-bottom:8px}
+.login-form{display:flex;gap:10px;margin-top:20px}
+.login-form input{flex:1;min-width:0;font:inherit;font-size:15px;padding:11px 13px;border:1px solid var(--line);
+  border-radius:8px;background:#fff}
+.login-form input:focus{outline:none;border-color:var(--brand)}
+.login-form .btn{white-space:nowrap}
+.tabs .logout{margin-left:auto;color:var(--fg2);border-color:transparent;background:transparent;font-weight:400}
+.tabs .logout:hover{color:#b3261e}
+
 /* 移动端：后台表格列多，改为外层横向滚动，避免撑破页面 */
 @media(max-width:720px){
   .admin .sec{padding:22px 0}
   .tabs{gap:6px;margin:16px 0 14px}
   .tabs a{padding:8px 12px;font-size:13px}
+  .login-box{margin:24px auto;padding:24px 20px}
+  .login-form{flex-direction:column}
   /* 表格容器：可横滑。不加负边距，避免把 .wrap 的 padding 撑破 */
   .tbl-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
   .atbl{min-width:640px;font-size:13px}

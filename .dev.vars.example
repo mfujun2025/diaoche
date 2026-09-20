@@ -2,4 +2,5 @@
 # 注意：wrangler.toml 里的 [vars] 是"生产默认值"，
 #       本地覆盖要写在 .dev.vars，改完必须重启 wrangler 才生效。
 
-ADMIN_EMAILS=your-email@example.com
+# 后台访问令牌：登录 /admin/ 时输入，建议 32 位以上随机串
+ADMIN_TOKEN=your-random-token-here

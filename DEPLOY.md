@@ -148,77 +148,107 @@ Pages 项目 → **Custom domains → Set up a domain**
 同时绑定 `www`：
 - 加 `www.xn--bqr649k.cn`，或在 Cloudflare 用 Redirect Rule 把 www 301 到裸域
 
-### 3.6 配置 Cloudflare Access 保护后台（重要）
+### 3.6 保护后台：访问令牌（`ADMIN_TOKEN`）
 
 后台地址：`https://xn--bqr649k.cn/admin/`
 
-**没有 Access 保护的话，任何人都能打开后台操作车源。必须在部署后立刻配上。**
+**方案：应用层令牌登录。** 打开后台会先看到登录框，输入 `ADMIN_TOKEN` 才进得去；令牌存在浏览器 localStorage，所有 admin 接口请求带 `X-Admin-Token` 头，服务端用**恒定时间比较**校验。
 
-#### 步骤
+#### 为什么不用 Cloudflare Access
 
-1. Cloudflare 控制台左侧 → **Zero Trust**（免费版含 50 用户额度，够用）
-   - 首次进入需选一个团队域名，形如 `yourteam.cloudflareaccess.com`，随意填
+最初用的是 Access（邮箱 + 验证码），但实测踩到一个**无法绕过的坑**：
 
-2. **Access → Applications → Add an application → Self-hosted**
+> **Cloudflare Pages 自定义域名 + Access 多域名应用 = 认证回调 404**
 
-3. 应用配置（**要建两个**，因为 Pages 有两套域名）：
+具体表现：把一个 Access 应用同时挂在 `xn--bqr649k.cn` 和 `diaoche-cn.pages.dev` 上时（官方称为 multi-domain application），
+认证完成后 Access 需要靠一串跨域重定向逐域种 cookie，其中会经过：
 
-   **应用 A：保护生产域名**
-   - Application name：`diaoche-admin`
-   - Session Duration：`24 hours`
-   - Public hostname：
-     - Subdomain：留空（裸域）
-     - Domain：`xn--bqr649k.cn`
-     - Path：`admin`
-   - 再加一条同样规则，Path 填 `api/admin`
+```
+https://xn--bqr649k.cn/cdn-cgi/access/authorized?nonce=...&state=...
+```
 
-   **应用 B：保护预览域名**（`.pages.dev`，别漏了，否则能从预览地址绕过）
-   - Public hostname：
-     - Subdomain：`diaoche-cn`
-     - Domain：`pages.dev`
-     - Path：`admin`
-   - 再加一条，Path 填 `api/admin`
+实测这个路径在**自定义域名上返回 404**（Pages 的 404 页），而在 `pages.dev` 上返回 400（正常走到 Access）。
+结果：认证走完却回不来，浏览器停在 404 页面。
 
-4. **建策略（Policy）**
-   - Policy name：`只允许我自己`
-   - Action：`Allow`
-   - Include → **Emails** → 填你的邮箱（如 `mfujun@agent.qq.com`）
+对照数据：
 
-5. **登录方式**
-   - 默认有 One-time PIN（邮箱验证码），够用
-   - 想接微信/Google 登录可在 Settings → Authentication 里加
+```
+xn--bqr649k.cn/admin/        => 302 要求登录，但登录后卡在 404
+diaoche-cn.pages.dev/admin   => 正常放行（无痕窗口实测：不要求登录）
+```
 
-6. 保存后，访问 `/admin/` 会自动跳到 Cloudflare 登录页，验证后才放行。
+**结论：Pages 自定义域名与 Access 的 `/cdn-cgi/*` 处理存在冲突，改用应用层令牌彻底绕开。**
 
-#### 双保险：白名单变量（可选但推荐）
+> 注意：`exclude: ["/cdn-cgi/*"]` **解决不了这个问题** —— 官方文档明确 `exclude` 的语义是「该路径不调用 Functions」，
+> 之后仍回落到 Pages 静态资源，找不到文件照样 404，不会交给 CF 边缘处理。
 
-Access 已在网关拦截，但为防止有人直连 Functions 域绕过，代码里还有一层邮箱白名单。
+#### 配置步骤
 
-**⚠️ 本项目不能用控制台改这个变量** —— 面板里三个变量全是灰色只读，全因为本项目环境变量由 `wrangler.toml` 托管。
-控制台会提示：
+**第一步：设令牌**
 
-> Environment variables for this project are being managed through **wrangler.toml**.
-> Only Secrets (encrypted variables) can be managed via the Dashboard.
-
-**唯一改法**：编辑仓库里的 `wrangler.toml`：
+`wrangler.toml` 的 `[vars]`（明文，仓库可见）：
 
 ```toml
 [vars]
 ENV = "production"
 SITE_NAME = "吊车.cn"
-ADMIN_EMAILS = "你的邮箱@example.com"   # 多个用逗号分隔
+ADMIN_TOKEN = "你的随机令牌"
 ```
 
-改完 commit + push，CI 部署时自动生效。
+**更安全的做法**是用加密 Secret（不进仓库、不可读回）：
 
-> 留空则跳过白名单校验（仍受 Access 保护）。
-> **填的话必须和 Zero Trust 应用策略里的邮箱一致**，否则会出现「Access 放行了但代码层返回 401」。
->
-> 本地覆盖要写在 `.dev.vars`（已 gitignore），**改完必须重启 wrangler，不热重载**。
+```bash
+# 方式一：命令行
+npx wrangler pages secret put ADMIN_TOKEN --project-name diaoche-cn
 
-#### 为什么前台不受影响
+# 方式二：控制台
+Workers & Pages → diaoche-cn → Settings → Variables and Secrets → Add → Secret
+```
 
-`public/_routes.json` 已声明只对 `/api/*` 和 `/img/*` 走 Functions，静态页直出 CDN，Access 规则也只挂在 `/admin` 和 `/api/admin` 两条路径上——**首页、车源大厅等前台页面访问速度完全不受影响**。
+> Secrets 优先级高于 `[vars]`，同名会覆盖。
+
+令牌建议用密码管理器生成 32 位以上随机串，例如：
+
+```bash
+node -e "console.log(require('crypto').randomBytes(24).toString('base64url'))"
+```
+
+**第二步：重新部署**（改 `wrangler.toml` 需 push 触发 CI；改 Secret 需重新部署一次才生效）
+
+**第三步：验证**
+
+```bash
+# 无令牌 → 应 401
+curl -s -o /dev/null -w "%{http_code}\n" https://xn--bqr649k.cn/api/admin/list
+
+# 错令牌 → 应 401
+curl -s -o /dev/null -w "%{http_code}\n" \
+  -H "X-Admin-Token: wrong" https://xn--bqr649k.cn/api/admin/list
+
+# 对令牌 → 应 200
+curl -s -o /dev/null -w "%{http_code}\n" \
+  -H "X-Admin-Token: 你的随机令牌" https://xn--bqr649k.cn/api/admin/list
+```
+
+浏览器访问 `https://xn--bqr649k.cn/admin/` → 出现「后台登录」→ 输入令牌 → 进入审核界面。
+登录一次后同浏览器免登录，右上角「退出」可清除。
+
+#### 安全说明（务必知道代价）
+
+| 项 | 说明 |
+| --- | --- |
+| **fail closed** | `ADMIN_TOKEN` 未配置时，**所有 admin 接口一律拒绝**（不会裸奔）。代价：忘配则后台进不去，需重新部署 |
+| **恒定时间比较** | 防时序攻击，避免逐位比较泄露令牌内容 |
+| **无频率限制** | 目前登录接口没有失败次数限制。令牌是 32 位随机串，暴力破解不可行，但建议后续加限流 |
+| **令牌在 localStorage** | 仅防 XSS 场景足够（本站无用户输入渲染到后台页）。比 Access 弱在：没有第二因素 |
+| **页面本身不加密** | `/admin/` 的 HTML 是公开的（登录框），真正的数据在 API 后面。这点比 Access 弱（Access 连页面都拦） |
+| **`/api/upload` 与 `/img`** | **不在保护范围**，仍无鉴权（见待办） |
+
+**如果哪天要回到 Access**：单域名应用（一个应用只挂一个域名）不会触发上述冲突，可以先把 `diaoche-cn.pages.dev` 单独做成一个应用验证。
+
+#### 已废弃的环境变量
+
+`ADMIN_EMAILS` 已不再使用（那是 Access 时代的邮箱白名单）。可以留着不管，代码不再读取。
 
 ---
 
@@ -420,11 +450,13 @@ curl -s -o /dev/null -w '%{http_code}\n' "$B/api/admin/list"
 | Actions 报 wrangler 权限不足 | Token 权限缺失 | 补 `Pages:Edit` + `D1:Edit` |
 | 车源列表一直"加载中" | `/api/trucks` 404 | 确认 `functions/api/` 目录被识别，本地用 `npm run preview` |
 | 提交后前台看不到 | 状态是 `pending` | 去 `/admin/` 审核通过 |
-| 打开 `/admin/` 直接可见，没要登录 | Access 没配或路径写错 | **先看状态码：应该是 302；返回 200 就是没拦住。** 检查两个域名的 Path 是 `admin` 与 `api/admin` |
-| **Access 配置界面看着全对，但就是不拦（返回 200）** | **Destinations 被填成了 `域名/admin + api/admin` 一整串**（表单把域名和路径合并输入时极易发生） | **用 API 读 `/accounts/{id}/access/apps` 看 `self_hosted_domains`，每项必须是独立的「域名/路径」。** 用 `PUT` 重写（带上 `name` + `type: self_hosted`，否则报 `12130`） |
-| `/admin/` 一直跳登录但登录后仍 401 | `ADMIN_EMAILS` 与 Access 策略邮箱不一致 | 改 `wrangler.toml`（控制台里这个变量是只读的） |
-| 控制台 Variables 全是灰的、改不了也加不了 | 环境变量由 `wrangler.toml` 托管 | 改 `wrangler.toml` 的 `[vars]`，推上去由 CI 生效 |
-| 能从 `.pages.dev` 预览域名绕过登录 | Access 只保护了生产域名 | 确认应用 Destinations 里包含 `diaoche-cn.pages.dev/admin` 与 `/api/admin` |
+| 打开 `/admin/` 只有登录框，进不去 | `ADMIN_TOKEN` 没配或输错 | 三个接口都试：无令牌/错令牌应 401，对令牌应 200。未配令牌时接口**全部拒绝**（fail closed），需在 `wrangler.toml` 或控制台 Secret 里补上再重新部署 |
+| 登录后立刻又弹回登录框 | localStorage 里的令牌失效 | 令牌被改过 → 重新输入新的。或浏览器禁用了 localStorage |
+| 忘了 `ADMIN_TOKEN` 是什么 | 明文变量可读回 | `wrangler.toml` 里能直接看到。若改用 Secret 则无法读回，只能重设 |
+| 控制台 Variables 全是灰的、改不了也加不了 | 环境变量由 `wrangler.toml` 托管 | 改 `wrangler.toml` 的 `[vars]`，推上去由 CI 生效。**但 Secrets 可以在控制台加**（不受此限制） |
+| **访问 `www.吊车.cn` 返回 522** | **浏览器把 `吊车.cn` 自动补成了 `www.`，而 `www` 没有 DNS 记录** | 加一条 `www` CNAME → `diaoche-cn.pages.dev`（橙云开）。访问后台请直接粘贴 punycode 地址 `https://xn--bqr649k.cn/admin/`，浏览器不会改写 punycode |
+| ~~打开 `/admin/` 直接可见，没要登录~~ | ~~Access 没配~~ | **已改用应用层令牌，此行保留仅作历史参考** |
+| ~~Access 认证后停在 404~~ | ~~Pages 自定义域名与 Access 的 `/cdn-cgi/*` 冲突~~ | **已改用应用层令牌绕开。详见 3.6** |
 | **`wrangler pages dev` 报 "Unknown arguments" 或读不到 wrangler.toml** | **wrangler 是 v3，不支持 `pages_build_output_dir`** | **`npm install -D wrangler@^4`** |
 | **Actions 报 "Wrangler requires at least Node.js v22.0.0"** | **workflow 里 `setup-node` 设成了 20** | **改成 `node-version: '22'`**（这是实测踩到的，v4 硬性要求 Node ≥22） |
 | Actions 报 `npx canceled due to missing packages` | workflow 缺 `npm ci` | 在 Build 之前加 `- run: npm ci` |
@@ -436,7 +468,7 @@ curl -s -o /dev/null -w '%{http_code}\n' "$B/api/admin/list"
 
 新提交的车源 `status = 'pending'`，不会出现在前台。**推荐用后台页面审核**：
 
-> 访问 `https://xn--bqr649k.cn/admin/` → 通过 Cloudflare Access 邮箱验证 → 在待审列表点「通过 / 驳回 / 删除」即可。
+> 访问 `https://xn--bqr649k.cn/admin/` → 输入 `ADMIN_TOKEN` → 在待审列表点「通过 / 驳回 / 删除」即可。
 
 备用方式（命令行，适合批量）：
 
@@ -470,8 +502,8 @@ npx wrangler d1 execute diaoche-db --remote \
 - [ ] Actions 首次构建成功
 - [ ] 首页 / 车源大厅 / 卖车表单三个页面可正常访问
 - [ ] 提交一条测试车源 → D1 里能查到
-- [ ] **Cloudflare Access 已配置（生产域名 + .pages.dev 两套），访问 `/admin/` 会要求登录**
-- [ ] **`ADMIN_EMAILS` 变量已填你的邮箱**
+- [ ] **`ADMIN_TOKEN` 已设置（`wrangler.toml` 的 `[vars]` 或控制台 Secret），访问 `/admin/` 会要求输入令牌**
+- [ ] **无令牌访问 `/api/admin/list` 返回 401**
 - [ ] 在 `/admin/` 点「通过」→ 前台车源大厅能看到该车源
 - [ ] 移动端（手机）打开首页，排版正常
 

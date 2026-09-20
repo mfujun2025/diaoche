@@ -1,6 +1,8 @@
-// 后台审核页交互（该页由 Cloudflare Access 保护，未登录访问不到）
+// 后台审核页交互（令牌登录保护）
 (function () {
   'use strict';
+
+  const TOKEN_KEY = 'dc_admin_token';
 
   const esc = (s) =>
     String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -9,6 +11,38 @@
   const BIZ_LABEL = { sale: '转让', rent: '出租', buy: '求购' };
 
   let currentStatus = 'pending';
+
+  const getToken = () => localStorage.getItem(TOKEN_KEY) || '';
+  const setToken = (t) => localStorage.setItem(TOKEN_KEY, t);
+  const clearToken = () => localStorage.removeItem(TOKEN_KEY);
+
+  /** 带令牌的请求封装 */
+  function api(path, init) {
+    const opts = Object.assign({}, init);
+    opts.headers = Object.assign(
+      { 'X-Admin-Token': getToken(), Accept: 'application/json' },
+      (init && init.headers) || {}
+    );
+    return fetch(path, opts);
+  }
+
+  function showLogin(msg) {
+    document.getElementById('admin-login').hidden = false;
+    document.getElementById('admin-main').hidden = true;
+    const box = document.getElementById('admin-login-msg');
+    if (msg) {
+      box.className = 'msg err';
+      box.textContent = msg;
+    } else {
+      box.className = 'msg';
+      box.textContent = '';
+    }
+  }
+
+  function showMain() {
+    document.getElementById('admin-login').hidden = true;
+    document.getElementById('admin-main').hidden = false;
+  }
 
   function row(t) {
     const name = `${t.tonnage}吨 ${t.brand}${t.model ? ' ' + t.model : ''}`;
@@ -46,14 +80,12 @@
     box.innerHTML = '<tr><td colspan="7" class="loading">加载中…</td></tr>';
 
     try {
-      const res = await fetch(`/api/admin/list?status=${encodeURIComponent(currentStatus)}&limit=100`, {
-        headers: { Accept: 'application/json' },
-      });
+      const res = await api(`/api/admin/list?status=${encodeURIComponent(currentStatus)}&limit=100`);
 
       if (res.status === 401) {
-        msg.className = 'msg err';
-        msg.textContent = '未认证：请通过 Cloudflare Access 登录后访问。';
-        box.innerHTML = '<tr><td colspan="7" class="loading">无权限</td></tr>';
+        // 令牌失效（被改过或清空），退回登录态
+        clearToken();
+        showLogin('登录状态已失效，请重新输入访问令牌。');
         return;
       }
 
@@ -61,9 +93,8 @@
       if (!j.ok) throw new Error(j.msg || '加载失败');
 
       msg.className = 'msg';
-      msg.textContent = `当前账号：${j.email}　|　待审 ${j.counts.pending} · 已通过 ${j.counts.approved} · 已驳回 ${j.counts.rejected}`;
+      msg.textContent = `待审 ${j.counts.pending} · 已通过 ${j.counts.approved} · 已驳回 ${j.counts.rejected}`;
 
-      // 角标
       document.querySelectorAll('[data-tab]').forEach((el) => {
         const k = el.dataset.tab;
         const n = k === 'all' ? j.counts.pending + j.counts.approved + j.counts.rejected : j.counts[k];
@@ -71,12 +102,29 @@
         el.classList.toggle('on', k === currentStatus);
       });
 
-      box.innerHTML = j.data.length ? j.data.map(row).join('') : '<tr><td colspan="7" class="loading">该分类下暂无记录</td></tr>';
+      box.innerHTML = j.data.length
+        ? j.data.map(row).join('')
+        : '<tr><td colspan="7" class="loading">该分类下暂无记录</td></tr>';
     } catch (e) {
       msg.className = 'msg err';
       msg.textContent = '加载失败，请刷新重试。';
       box.innerHTML = '<tr><td colspan="7" class="loading">加载失败</td></tr>';
     }
+  }
+
+  /** 校验令牌是否可用，可用则进主界面 */
+  async function tryToken(token) {
+    const res = await fetch('/api/admin/login', {
+      method: 'POST',
+      headers: { 'X-Admin-Token': token, Accept: 'application/json' },
+    });
+    if (res.ok) return { ok: true };
+    let msg = '登录失败';
+    try {
+      const j = await res.json();
+      if (j && j.msg) msg = j.msg;
+    } catch {}
+    return { ok: false, msg };
   }
 
   window.switchTab = function (ev, status) {
@@ -86,6 +134,38 @@
   };
 
   document.addEventListener('DOMContentLoaded', () => {
+    // 登录表单
+    document.getElementById('admin-login-form').addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+      const input = document.getElementById('admin-token');
+      const btn = ev.target.querySelector('button');
+      const token = input.value.trim();
+      if (!token) return;
+
+      btn.disabled = true;
+      btn.textContent = '验证中…';
+      const r = await tryToken(token);
+      btn.disabled = false;
+      btn.textContent = '登录';
+
+      if (r.ok) {
+        setToken(token);
+        input.value = '';
+        showMain();
+        load('pending');
+      } else {
+        showLogin(r.msg);
+      }
+    });
+
+    // 退出
+    document.getElementById('admin-logout').addEventListener('click', (ev) => {
+      ev.preventDefault();
+      clearToken();
+      showLogin('已退出登录。');
+    });
+
+    // 审核操作
     const box = document.getElementById('admin-body');
     box.addEventListener('click', async (ev) => {
       const btn = ev.target.closest('button[data-act]');
@@ -99,11 +179,18 @@
       btn.disabled = true;
       btn.textContent = '处理中';
       try {
-        const res = await fetch('/api/admin/review', {
+        const res = await api('/api/admin/review', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ id, action: act }),
         });
+
+        if (res.status === 401) {
+          clearToken();
+          showLogin('登录状态已失效，请重新输入访问令牌。');
+          return;
+        }
+
         const j = await res.json();
         if (j.ok) {
           document.getElementById('admin-msg').className = 'msg ok';
@@ -123,6 +210,12 @@
       }
     });
 
-    load('pending');
+    // 启动：有令牌就直接进，否则显示登录框
+    if (getToken()) {
+      showMain();
+      load('pending');
+    } else {
+      showLogin('');
+    }
   });
 })();

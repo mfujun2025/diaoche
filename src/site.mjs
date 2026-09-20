@@ -172,23 +172,35 @@ const guideBody = `
 </section>
 `;
 
-/* ---------- 后台审核（Cloudflare Access 保护） ---------- */
+/* ---------- 后台审核（令牌登录保护） ---------- */
 const adminBody = `
 <section class="wrap sec">
-  <h1 class="h1">车源审核</h1>
-  <p class="lead">新提交的车源默认进入待审队列，通过后才会在前台车源大厅展示。</p>
-  <p id="admin-msg" class="msg"></p>
-  <div class="tabs">
-    <a href="#" data-tab="pending" class="on" onclick="return switchTab(event,'pending')">待审核<span class="n">0</span></a>
-    <a href="#" data-tab="approved" onclick="return switchTab(event,'approved')">已通过<span class="n">0</span></a>
-    <a href="#" data-tab="rejected" onclick="return switchTab(event,'rejected')">已驳回<span class="n">0</span></a>
-    <a href="#" data-tab="all" onclick="return switchTab(event,'all')">全部<span class="n">0</span></a>
+  <div id="admin-login" class="login-box" hidden>
+    <h1 class="h1">后台登录</h1>
+    <p class="lead">请输入后台访问令牌。</p>
+    <p id="admin-login-msg" class="msg"></p>
+    <form id="admin-login-form" class="login-form" autocomplete="off">
+      <input type="password" id="admin-token" placeholder="访问令牌" autocomplete="current-password" required>
+      <button type="submit" class="btn">登录</button>
+    </form>
   </div>
-  <div class="tbl-wrap">
-    <table class="atbl">
-      <thead><tr><th>ID</th><th>车源</th><th>价格</th><th>状态</th><th>联系方式</th><th>提交时间</th><th>操作</th></tr></thead>
-      <tbody id="admin-body"></tbody>
-    </table>
+  <div id="admin-main" hidden>
+    <h1 class="h1">车源审核</h1>
+    <p class="lead">新提交的车源默认进入待审队列，通过后才会在前台车源大厅展示。</p>
+    <p id="admin-msg" class="msg"></p>
+    <div class="tabs">
+      <a href="#" data-tab="pending" class="on" onclick="return switchTab(event,'pending')">待审核<span class="n">0</span></a>
+      <a href="#" data-tab="approved" onclick="return switchTab(event,'approved')">已通过<span class="n">0</span></a>
+      <a href="#" data-tab="rejected" onclick="return switchTab(event,'rejected')">已驳回<span class="n">0</span></a>
+      <a href="#" data-tab="all" onclick="return switchTab(event,'all')">全部<span class="n">0</span></a>
+      <a href="#" id="admin-logout" class="logout">退出</a>
+    </div>
+    <div class="tbl-wrap">
+      <table class="atbl">
+        <thead><tr><th>ID</th><th>车源</th><th>价格</th><th>状态</th><th>联系方式</th><th>提交时间</th><th>操作</th></tr></thead>
+        <tbody id="admin-body"></tbody>
+      </table>
+    </div>
   </div>
 </section>
 `;

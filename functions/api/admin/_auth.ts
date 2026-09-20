@@ -1,61 +1,68 @@
-// 后台鉴权：依赖 Cloudflare Access 注入的 JWT 头
-// Access 启用后，未登录请求根本到不了 Function（被 CF 拦掉），
-// 所以这里只做「请求确实来自 Access」的二次校验，防止有人绕过 Access 直连 Functions 域。
+// 后台鉴权：令牌登录（不依赖 Cloudflare Access）
+//
+// 背景：Cloudflare Pages 自定义域名 + Access 多域名应用存在冲突，
+// `/cdn-cgi/access/authorized` 在自定义域名上会 404，导致认证回调失败。
+// 改用应用层令牌：前端登录一次存 localStorage，之后所有 admin 请求带 X-Admin-Token 头。
+//
+// 环境变量：
+//   ADMIN_TOKEN  必填。后台登录口令，建议 32 位以上随机串。
+//                未配置时后台接口一律拒绝（fail closed），避免忘配导致裸奔。
 
 export interface AdminEnv {
   DB: D1Database;
-  ADMIN_EMAILS?: string; // 逗号分隔的允许邮箱，可选白名单
+  ADMIN_TOKEN?: string;
 }
 
 export interface AdminResult {
   ok: boolean;
-  email?: string;
   reason?: string;
 }
 
-/** 校验请求是否经过 Cloudflare Access 且身份合法 */
+/** 恒定时间字符串比较，避免按字符逐位比较泄露长度/内容 */
+function safeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) {
+    diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  }
+  return diff === 0;
+}
+
+/** 校验请求携带的后台令牌 */
 export function verifyAdmin(request: Request, env: AdminEnv): AdminResult {
-  const jwt = request.headers.get('Cf-Access-Jwt-Assertion');
-  if (!jwt) {
-    return { ok: false, reason: '未通过 Cloudflare Access 认证' };
+  const expected = (env.ADMIN_TOKEN || '').trim();
+
+  // 未配置令牌时一律拒绝：宁可后台进不去，也不能裸奔
+  if (!expected) {
+    return { ok: false, reason: '后台未配置访问令牌，请先设置 ADMIN_TOKEN' };
   }
 
-  // 从 JWT payload 解析邮箱（payload 已被 CF 签名，且请求已过 Access 网关）
-  let email = '';
-  try {
-    const payloadB64 = jwt.split('.')[1] || '';
-    // base64url -> base64
-    const b64 = payloadB64.replace(/-/g, '+').replace(/_/g, '/');
-    const json = decodeURIComponent(
-      atob(b64)
-        .split('')
-        .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
-        .join('')
-    );
-    email = String(JSON.parse(json).email || '').toLowerCase();
-  } catch {
-    return { ok: false, reason: '身份令牌解析失败' };
+  // 优先读自定义头；兼容 Authorization: Bearer <token>
+  let got = (request.headers.get('X-Admin-Token') || '').trim();
+  if (!got) {
+    const auth = request.headers.get('Authorization') || '';
+    const m = /^Bearer\s+(.+)$/i.exec(auth.trim());
+    if (m) got = m[1].trim();
   }
 
-  if (!email) {
-    return { ok: false, reason: '身份令牌中无邮箱' };
+  if (!got) {
+    return { ok: false, reason: '缺少访问令牌' };
   }
 
-  // 可选白名单：配了 ADMIN_EMAILS 就只允许名单内邮箱
-  const allow = (env.ADMIN_EMAILS || '')
-    .split(',')
-    .map((s) => s.trim().toLowerCase())
-    .filter(Boolean);
-  if (allow.length && !allow.includes(email)) {
-    return { ok: false, reason: '该账号无审核权限' };
+  if (!safeEqual(got, expected)) {
+    return { ok: false, reason: '访问令牌不正确' };
   }
 
-  return { ok: true, email };
+  return { ok: true };
 }
 
 export function json(data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data), {
     status,
-    headers: { 'Content-Type': 'application/json; charset=utf-8' },
+    headers: {
+      'Content-Type': 'application/json; charset=utf-8',
+      // 后台接口一律不缓存
+      'Cache-Control': 'no-store',
+    },
   });
 }

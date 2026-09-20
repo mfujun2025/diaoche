@@ -16,6 +16,18 @@ bucket_name = "diaoche-images"
 [vars]
 ENV = "production"
 SITE_NAME = "吊车.cn"
-# 后台审核白名单（逗号分隔）。留空则任何通过 Cloudflare Access 的账号都能审核。
-# 必须与 Zero Trust 应用策略里的邮箱一致，否则会出现「Access 放行但代码层拒绝」。
-ADMIN_EMAILS = "548827878@qq.com"
+# 后台访问令牌：登录 /admin/ 时输入。
+#
+# ⚠️ 这里留空是刻意的 —— 本项目是公开仓库，令牌写进 wrangler.toml 等于公开。
+#    请改用加密 Secret 配置（优先级高于此处，同名会覆盖）：
+#
+#      控制台：Workers & Pages → diaoche-cn → Settings → Variables and Secrets
+#              → + Add → 类型选 Secret → Name: ADMIN_TOKEN → Value: <你的令牌> → Save
+#              → 然后重新部署一次（Deployments → Retry deployment）
+#
+#      命令行：npx wrangler pages secret put ADMIN_TOKEN --project-name diaoche-cn
+#
+# 生成令牌：node -e "console.log(require('crypto').randomBytes(24).toString('base64url'))"
+#
+# ⚠️ 未配置时，所有 /api/admin/* 接口一律返回 401（fail closed），后台进不去。
+ADMIN_TOKEN = ""
