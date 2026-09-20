@@ -1,55 +1,53 @@
-# Cloudflare 控制台操作清单（可勾选）
+# Cloudflare 配置清单与现状
 
 > **当前状态：站点已上线 ✅**
-> 线上地址：https://diaoche-cn.pages.dev/
-> CI 全绿（10/10 步骤），D1 已建表，API 与审核隔离已实测通过。
+> 线上地址：<https://xn--bqr649k.cn/>（自定义域名已生效）· <https://diaoche-cn.pages.dev/>
+> CI 全绿，D1 已建表，R2 图片上传功能已完成并测试通过。
 >
-> **剩余 2 项必须你手动做**：① 绑自定义域名 ② 配 Access 保护后台（安全关键）。
+> **剩余 2 项必须你手动做**：① 给 R2 桶配自定义域名（否则图片显示不出来）② 配 Access 保护后台（安全关键）。
 
 ---
 
 ## 一、已完成（无需操作，仅作记录）
 
 | 项 | 结果 |
-|---|---|
-| GitHub Secrets | ✅ `CLOUDFLARE_API_TOKEN`、`CLOUDFLARE_ACCOUNT_ID` 已写入 |
+| --- | --- |
+| GitHub Secrets | ✅ `CLOUDFLARE_API_TOKEN`、`CLOUDFLARE_ACCOUNT_ID` |
 | D1 数据库 | ✅ `diaoche-db`，ID `a7eb7c3b-d557-4da8-8d8e-982a874ae3f5` |
-| D1 建表 | ✅ 2 表（`trucks` / `prices`）+ 3 索引 |
-| D1 绑定 | ✅ 已配置到 Pages 项目（production + preview 双环境） |
+| D1 建表 | ✅ 3 表（`trucks` / `prices` / `upload_log`）+ 4 索引 |
+| D1 绑定 | ✅ Pages 项目 production + preview 双环境 |
+| R2 桶 | ✅ `diaoche-images` |
+| R2 权限 | ✅ Token 已含 `Workers R2 Storage / Edit` |
+| R2 绑定 | ✅ Pages 项目 production + preview 双环境 |
 | Pages 项目 | ✅ `diaoche-cn`，production branch = `main` |
-| 环境变量 | ✅ `ENV` / `SITE_NAME` / `ADMIN_EMAILS` 已配置 |
+| **自定义域名** | ✅ **`xn--bqr649k.cn` 已绑定，状态 active** |
+| 环境变量 | ✅ `ENV` / `SITE_NAME` / `ADMIN_EMAILS` |
 | CI 流水线 | ✅ 全绿，静态页 + Functions 均已发布 |
-
-**实测验证结果（线上，非本地）**：
-
-| 测试 | 结果 |
-|---|---|
-| 首页 `GET /` | HTTP 200 |
-| 车源列表 `GET /api/trucks` | `{"ok":true,"total":0,"data":[]}` |
-| 带筛选 `?biz_type=sale&tonnage=25` | 正常返回 |
-| 提交 `POST /api/submit` | `{"ok":true,"msg":"提交成功，审核通过后展示"}` |
-| 校验：吨位 9999 | 400 `吨位需为 1~2000 的数字` |
-| 校验：缺联系方式 | 400 `联系方式必填且不超过 64 字` |
-| **审核隔离** | 提交后进库为 `pending`，前台列表仍 `total: 0` ✅ |
-| 后台 `GET /api/admin/list`（无 JWT） | 401 `未通过 Cloudflare Access 认证` |
-| 后台（伪造 JWT） | 401 `身份令牌解析失败` |
-| 测试数据 | 已清理，`trucks` 表 count = 0 |
+| 图片上传功能 | ✅ 前端选图 + 后端 `/api/upload` + 卡片显示封面 |
 
 ---
 
 ## 二、待你操作（2 项）
 
-### ☐ 1. 绑定自定义域名（不做则只能用 .pages.dev）
+### ☐ 1. 给 R2 桶配自定义域名（图片功能必需）
 
-Pages 项目 → **Custom domains** → Set up a domain
+**为什么必须配**：R2 桶默认**私有**，`<img src="...">` 直接访问会 403。上传的图片要能显示，必须绑一个公开域名。
 
-填 `xn--bqr649k.cn`（**punycode 形式，不能写中文**）
+**操作路径**：
 
-> `吊车.cn` 的 DNS 必须已托管在 Cloudflare 下（NS 指向 CF）。若还没接入，先去域名注册商改 NS。
+**R2 → `diaoche-images` → Settings → Public access → Custom Domains → `+ Add`**
+
+填：**`img.xn--bqr649k.cn`**
+
+> - **必须 punycode 形式**，不能写中文
+> - CF 会自动补 DNS 的 CNAME 记录；若提示需手动添加，把记录值发我确认
+> - 配好后图片地址形如 `https://img.xn--bqr649k.cn/trucks/202609/xxxxxxxx.png`
+
+**配完回我一声**，我验证图片能否正常访问。
 
 ---
 
-### ☐ 2. 创建 Access 应用保护后台（安全关键，不做则后台裸奔）
+### ☐ 2. 创建 Access 应用保护后台（安全关键）
 
 ⚠️ **当前 `/admin/` 和 `/api/admin/*` 是公开可访问的**（代码层白名单也因 `ADMIN_EMAILS` 为空而未生效）。
 **在配好 Access 之前，不要往里面提交真实车源。**
@@ -66,17 +64,14 @@ Zero Trust → **Access → Applications → Add → Self-hosted**
 **应用 B（预览域名 —— 千万别漏）**
 
 - Name：`diaoche-admin-preview`
-- Subdomain：`diaoche-cn`
-- Domain：`pages.dev`
+- Subdomain：`diaoche-cn`，Domain：`pages.dev`
 - Path：`admin`
 - **再加一条** Path：`api/admin`
 
 > ⚠️ 只保护生产域名 = 留后门。`.pages.dev` 是公开可达的，任何人都能从那里进后台。
+> Access（Zero Trust）**只能网页端配置**，API 做不了。
 
-**策略（每个应用配一条）**
-
-- Action：`Allow`
-- Include → **Emails** → 填你的邮箱
+**策略（每个应用配一条）**：Action `Allow` → Include → **Emails** → 填你的邮箱
 
 ### ☐ 3. 填 `ADMIN_EMAILS`（双保险）
 
@@ -86,39 +81,43 @@ Pages 项目 → Settings → **Variables and Secrets** → 编辑 `ADMIN_EMAILS
 
 ---
 
-## 三、后置项：R2 图片存储（当前已禁用）
+## 三、图片上传功能说明
 
-**为什么禁用**：CF API Token 缺 `Workers R2 Storage / Edit` 权限，部署时 Functions 发布失败：
+### 用户流程
 
-```
-✘ [ERROR] Failed to publish your Function.
-  R2 bucket 'diaoche-images' not found.
-```
+1. 在 `/sell/` 填表，选图（最多 9 张，单张 ≤5MB）
+2. 前端显示缩略图，可单张删除
+3. 提交时**先传图**（`POST /api/upload`）拿到 key 列表，再带着 key 提交车源
+4. 车源进 `pending`，管理员审核通过后，前台卡片显示封面图 + 图片数量角标
 
-**影响**：零。项目 `functions/` 代码零引用 `env.IMAGES`，前端图片上传也未接。
+### 安全设计
 
-**恢复步骤**：
+| 措施 | 说明 |
+| --- | --- |
+| **magic bytes 校验** | 不信任客户端 Content-Type，读文件头判断真实格式 |
+| 格式白名单 | 仅 JPG / PNG / WebP / GIF |
+| 大小限制 | 单张 ≤5MB |
+| 数量限制 | 单次 ≤9 张 |
+| **服务端生成文件名** | `trucks/YYYYMM/<24位随机>.ext`，不含任何用户输入，防路径穿越 |
+| 频率限制 | 同 IP 每分钟最多 20 次上传请求（靠 `upload_log` 表） |
 
-1. 编辑 CF API Token，加权限 `Account / Workers R2 Storage / Edit`
-2. 建桶：控制台 `R2` → Create bucket → 名称 `diaoche-images`
-3. **同步更新 GitHub Secret** `CLOUDFLARE_API_TOKEN`（否则 CI 仍无权限）
-4. 取消 `wrangler.toml` 中 R2 段的注释，推送
+### 待办：上传接口的鉴权策略
 
-> 建议绑自定义子域（如 `img.xn--bqr649k.cn`）用于图片访问。
-> 不要直接用 `r2.dev` 域名，有速率限制，不适合生产。
+当前 `/api/upload` **未做身份校验**，任何人都能调用。目前靠频率限制兜底。
+
+后续建议二选一（等你定）：
+- **A**：加 Access 保护（简单，但会让普通卖家也传不了图）
+- **B**：加 Turnstile 人机验证（推荐，卖家用不受影响，能挡机器刷）
 
 ---
 
-## 四、验收（全部完成后）
+## 四、验收清单
 
 按 `DEPLOY.md` 第 7 节做端到端验证，关键三项：
 
-- 提交一条测试车源 → 前台**看不到**（pending 状态）
-- 访问 `/admin/` → **要求登录**（Access 拦截）
-- 后台点「通过」→ 前台能看到
-
-> 前两项已在 `.pages.dev` 上实测通过（审核隔离 + 接口鉴权）。
-> 第三项需要 Access 配好后，用你邮箱登录后台才能验。
+- 提交一条测试车源 → 前台**看不到**（pending 状态）✅ 已实测
+- 访问 `/admin/` → **要求登录**（Access 拦截）⬜ 待 Access 配好后验
+- 后台点「通过」→ 前台能看到 ✅ 已实测
 
 ---
 
@@ -127,13 +126,15 @@ Pages 项目 → Settings → **Variables and Secrets** → 编辑 `ADMIN_EMAILS
 | 项 | 状态 |
 | --- | --- |
 | 代码推送 | ✅ 完成 |
-| CI 流水线 | ✅ **全绿通过** |
+| CI 流水线 | ✅ 全绿通过 |
 | Node 22 + wrangler 4 | ✅ 已修正 |
 | GitHub Secrets | ✅ 已配置 |
-| D1 数据库 + 建表 | ✅ 已创建并绑定 |
-| Pages 项目 + 首次部署 | ✅ **已上线** |
-| 站点功能实测 | ✅ 10 项通过 |
-| 自定义域名 | ⬜ **待你配置** |
-| Access 保护 | ⬜ **待你配置（安全关键）** |
+| D1 数据库 + 建表 + 绑定 | ✅ 完成 |
+| R2 桶 + 权限 + 绑定 | ✅ 完成 |
+| Pages 项目 + 部署 | ✅ 已上线 |
+| **自定义域名 `吊车.cn`** | ✅ **已绑定生效** |
+| 图片上传功能 | ✅ 代码完成并实测通过 |
+| **R2 图片对外访问** | ⬜ **待你配自定义域名** |
+| Access 保护后台 | ⬜ **待你配置（安全关键）** |
 | `ADMIN_EMAILS` | ⬜ **待你填写** |
-| R2 图片存储 | ⬜ 后置（需补 token 权限） |
+| 上传接口鉴权 | ⬜ 待你定策略（Access 或 Turnstile） |

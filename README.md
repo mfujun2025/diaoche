@@ -33,9 +33,9 @@
 
 - **构建**：Node.js 原生脚本（`scripts/build.mjs`），把 `src/site.mjs` 中的页面定义渲染为静态 HTML，样式内联输出
 - **托管**：Cloudflare Pages（全球 CDN）
-- **API**：Cloudflare Pages Functions（`functions/api/submit.ts`、`functions/api/trucks.ts`）
+- **API**：Cloudflare Pages Functions（`functions/api/trucks.ts`、`submit.ts`、`upload.ts`、`admin/*`）
 - **数据库**：D1（SQLite），表结构见 `schema.sql`
-- **对象存储**：R2（图片，二期接入；当前 `wrangler.toml` 中已注释，原因见 SETUP-CHECKLIST）
+- **对象存储**：R2（车况图片，单张 ≤5MB、最多 9 张，走 `img.xn--bqr649k.cn` 自定义域）
 - **CI/CD**：GitHub Actions（`.github/workflows/deploy.yml`）
 - **后台鉴权**：Cloudflare Access（Zero Trust）+ 代码层邮箱白名单双保险
 
@@ -61,7 +61,8 @@ npm run db:init       # 建线上 D1 表（--remote）
 2. **车源默认 `pending` 状态**，人工审核改 `approved` 后才在前台展示
 3. **所有 D1 查询走 `.bind()` 参数绑定**，防 SQL 注入
 4. **前端展示统一 `esc()` 转义**，防 XSS
-5. **平台定位为信息服务**：不参与交易、不垫资、不做担保，footer 声明不可删
+5. **上传图片必须过 magic bytes 校验**（不信客户端 Content-Type），文件名由服务端生成
+6. **平台定位为信息服务**：不参与交易、不垫资、不做担保，footer 声明不可删
 
 ## 上线
 

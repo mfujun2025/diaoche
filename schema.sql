@@ -39,3 +39,12 @@ CREATE TABLE IF NOT EXISTS prices (
 );
 
 CREATE INDEX IF NOT EXISTS idx_prices_tonnage ON prices(tonnage, period);
+
+-- 图片上传限流日志（防滥用，定期清理旧记录即可）
+CREATE TABLE IF NOT EXISTS upload_log (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  ip         TEXT NOT NULL,
+  created_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_upload_log_ip ON upload_log(ip, created_at);

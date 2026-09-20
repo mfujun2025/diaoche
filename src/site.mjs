@@ -106,6 +106,11 @@ const sellBody = `
     </div>
     <label class="check"><input name="has_accident" type="checkbox"> 该车有事故/大修记录（如实勾选，便于买方判断）</label>
     <label>车况描述<textarea name="condition" rows="4" placeholder="如：19年徐工XCA25，一手车，工时6200，无事故，可过户"></textarea></label>
+    <label>车况照片（选填，最多 9 张，单张 ≤ 5MB）
+      <input id="f-images" type="file" name="file" accept="image/jpeg,image/png,image/webp,image/gif" multiple>
+    </label>
+    <p class="hint">支持 JPG / PNG / WebP / GIF。照片真实清晰的车源，成交率明显更高。</p>
+    <div id="img-preview" class="img-preview"></div>
     <label>联系方式（必填）<input name="contact" required placeholder="手机号 / 微信号"></label>
     <button type="submit" class="btn">提交车源</button>
     <p id="sell-msg" class="msg"></p>

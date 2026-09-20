@@ -27,7 +27,7 @@ export const onRequestGet: PagesFunction<Env> = async (ctx) => {
     const offset = Math.max(Number(p.get('offset')) || 0, 0);
 
     const sql = `SELECT id, biz_type, tonnage, brand, model, year, hours, province, city,
-                        price, price_unit, condition, has_accident, created_at
+                        price, price_unit, condition, has_accident, images, created_at
                  FROM trucks
                  WHERE ${where.join(' AND ')}
                  ORDER BY created_at DESC
@@ -35,7 +35,17 @@ export const onRequestGet: PagesFunction<Env> = async (ctx) => {
 
     const { results } = await ctx.env.DB.prepare(sql).bind(...args, limit, offset).all();
 
-    return new Response(JSON.stringify({ ok: true, total: results?.length ?? 0, data: results ?? [] }), { status: 200, headers });
+    // images 在库里是 JSON 字符串，这里解析成数组返回，前端直接用
+    const data = (results ?? []).map((r: any) => {
+      let imgs: string[] = [];
+      try {
+        const parsed = JSON.parse(r.images || '[]');
+        if (Array.isArray(parsed)) imgs = parsed.filter((k) => typeof k === 'string' && k);
+      } catch {}
+      return { ...r, images: imgs };
+    });
+
+    return new Response(JSON.stringify({ ok: true, total: data.length, data }), { status: 200, headers });
   } catch (e: any) {
     return new Response(JSON.stringify({ ok: false, msg: '查询失败' }), { status: 500, headers });
   }
