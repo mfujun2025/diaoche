@@ -62,4 +62,12 @@ npm run db:init       # 建线上 D1 表（--remote）
 
 ## 上线
 
-完整步骤见 [DEPLOY.md](./DEPLOY.md)。
+- **操作清单（可勾选，照着做即可）**：见 [SETUP-CHECKLIST.md](./SETUP-CHECKLIST.md)
+- **完整说明（含原理与排错）**：见 [DEPLOY.md](./DEPLOY.md)
+
+## 环境要求
+
+| 项 | 版本 |
+|---|---|
+| Node.js | **≥ 22**（wrangler v4 硬性要求） |
+| wrangler | **v4**（v3 读不到 `wrangler.toml` 的 `pages_build_output_dir`） |
