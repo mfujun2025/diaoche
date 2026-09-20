@@ -53,11 +53,14 @@ function gitFiles() {
   return out.toString('utf8').split('\0').filter(Boolean);
 }
 
-const files = gitFiles().filter((f) => !f.startsWith('.github/workflows/'));
-const skipped = gitFiles().filter((f) => f.startsWith('.github/workflows/'));
+const allFiles = gitFiles();
+// workflow 文件需要 token 具备 workflow scope；无权限时自动跳过并提示，不中断整批推送
+const SKIP_WORKFLOW = process.env.SKIP_WORKFLOW === '1';
+const files = SKIP_WORKFLOW ? allFiles.filter((f) => !f.startsWith('.github/workflows/')) : allFiles;
+const skipped = SKIP_WORKFLOW ? allFiles.filter((f) => f.startsWith('.github/workflows/')) : [];
 console.log(`[push] 本地跟踪文件 ${files.length} 个`);
 if (skipped.length) {
-  console.log(`[push] ⚠️ 跳过 ${skipped.length} 个 workflow 文件（需 workflow scope 的 token 才能写入）`);
+  console.log(`[push] ⚠️ 跳过 ${skipped.length} 个 workflow 文件（token 缺 workflow scope）`);
   skipped.forEach((f) => console.log(`        - ${f}`));
 }
 
