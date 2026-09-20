@@ -73,15 +73,20 @@
 
 ---
 
-## 还差什么
+## 状态：全部完成 ✅
 
-代码层面全站已经完整可用，**后台 Access 防护已配好并验证生效**。
+站点已上线 · 图片上传 + 显示全链路已打通 · 后台 Access 防护已生效 · `ADMIN_EMAILS` 已填
 
-### ☐ 最后 1 件事：填 `ADMIN_EMAILS`
+### 怎么进后台
 
-Pages 项目 → Settings → Variables and Secrets → 编辑 `ADMIN_EMAILS`，填 **`548827878@qq.com`**（跟 Access 策略里同一个邮箱）。
+浏览器打开 **<https://xn--bqr649k.cn/admin/>**
 
-这是第二层防护 —— 万一 Access 被绕过，代码层还会再校验一次邮箱。**目前为空 = 这层没生效。**
+1. 跳到 Cloudflare 登录页
+2. 填邮箱 `548827878@qq.com`
+3. 收 6 位验证码邮件 → 填入
+4. 进入后台，可审核车源（里面有 2 条之前的测试数据，可以直接删掉）
+
+用的是 **One-time PIN** 方式，不需要额外配 Google/GitHub 登录。
 
 ---
 
@@ -95,35 +100,45 @@ Pages 项目 → Settings → Variables and Secrets → 编辑 `ADMIN_EMAILS`，
 | 应用 | `吊车.cn`（一个应用管两个域名） |
 | Destinations | `吊车.cn/admin`、`吊车.cn/api/admin`、`diaoche-cn.pages.dev/admin`、`diaoche-cn.pages.dev/api/admin` |
 | 策略 | `allow-me` → Allow → Emails → `548827878@qq.com` |
+| `ADMIN_EMAILS` | `548827878@qq.com`（写在 `wrangler.toml`，与策略一致） |
 
-**线上验证（4 个路径全部 302 跳登录页，前台 5 页未受影响）**：
+**线上验证（4 个路径全部 302 跳登录页，前台 6 页未受影响）**：
 
 ```
-xn--bqr649k.cn/admin/              → 302 → mfujun.cloudflareaccess.com/...
+xn--bqr649k.cn/admin/              → 302
 xn--bqr649k.cn/api/admin/list      → 302
 diaoche-cn.pages.dev/admin/        → 302
 diaoche-cn.pages.dev/api/admin/list → 302
+前台 / /trucks/ /sell/ /rent/ /price/ /guide/ → 全部 200
 ```
 
-### ⚠️ 配的时候踩了个很隐蔽的坑
+### ⚠️ 配的时候踩了两个坑
+
+**坑一：Destinations 极其容易填错，且界面完全看不出来**
 
 Zero Trust 网页表单在 `Switch to custom input` 模式下，「域名」和「路径」会被合并成一个输入框，
 **很容易把 `域名/admin + api/admin` 整串填进 Domain 字段**。
 
-后果很坑：Access 拿这整串去匹配请求，**永远匹配不上 → 策略完全失效**，
-但**界面上看起来一切正常**（Policies 列显示 `allow-me`，Destinations 有内容）。
+后果：Access 拿这整串去匹配请求，**永远匹配不上 → 策略完全失效**，
+但界面上看起来一切正常（Policies 列显示 `allow-me`，Destinations 有内容）。
 
 识别方法：用 API 读 `/accounts/{id}/access/apps`，看 `self_hosted_domains` 数组里
 每个元素是不是**独立的「域名/路径」**。
 
-**判据**：Access 生效时未登录访问返回 **302**；返回 200 就是没拦住。
+**判据：Access 生效时未登录访问返回 302；返回 200 就是没拦住。**
+
+**坑二：`ADMIN_EMAILS` 在控制台改不了**
+
+本项目环境变量由 `wrangler.toml` 托管，所以控制台 Variables 页面全是灰色只读
+（点 `+ Add` 加同名会报 `already exists`）。控制台自己会提示「managed through wrangler.toml」。
+
+**改法：改 `wrangler.toml` 的 `[vars]`，push 后由 CI 生效。**
 
 ---
 
-## 其他遗留项
+## 剩余非阻塞项
 
 - **上传接口 `/api/upload` 无鉴权**：目前靠频率限制兜底（同 IP 每分钟 ≤20 次）。建议后续加 Turnstile 人机验证（比 Access 好——不会挡住正常卖家）
-- **线上测试数据**：2 条 pending 测试车源 + 1 个测试图对象。**前台不可见，无影响**，等 Access 配好从后台删
-- **待吊销的 PAT**：`ghp_...SATU8`（之前对话中暴露过）
+- **线上测试数据**：2 条 pending 测试车源 + 1 个测试图对象。**前台不可见，无影响**，从后台删掉即可
+- **待吊销**：GitHub PAT `ghp_...SATU8`（之前对话中暴露过）
 - **待删除的两个临时 CF token**：`cfut_Urh2...`（只读）、`cfut_zRdge...`（读写）—— 都用完了
-- **CF 主 API Token 已失效**：要动 CF 资源时需要重新建一个
