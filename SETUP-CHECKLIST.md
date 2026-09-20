@@ -76,6 +76,8 @@ database_id = "REPLACE_WITH_YOUR_D1_DATABASE_ID"   # ← 换成真实 ID
 npx wrangler d1 execute diaoche-db --file=./schema.sql --remote
 ```
 
+
+
 > ⚠️ **必须带 `--remote`**。不带只会建本地表，线上一提交就 500。
 
 ### ☐ 6. 建 R2 存储桶

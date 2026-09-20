@@ -7,7 +7,7 @@ pages_build_output_dir = "dist"
 [[d1_databases]]
 binding = "DB"
 database_name = "diaoche-db"
-database_id = "REPLACE_WITH_YOUR_D1_DATABASE_ID"
+database_id = "a7eb7c3b-d557-4da8-8d8e-982a874ae3f5"
 
 [[r2_buckets]]
 binding = "IMAGES"
