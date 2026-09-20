@@ -41,6 +41,19 @@ const ADMIN_CSS = `
 .pill.rejected{background:#fdf6f5;color:#b3261e;border-color:#f5c6c0}
 .pill.acc{background:#fdecea;color:#b3261e;border-color:#f5c6c0}
 .loading{text-align:center;color:var(--fg2);padding:34px}
+
+/* 移动端：后台表格列多，改为外层横向滚动，避免撑破页面 */
+@media(max-width:720px){
+  .admin .sec{padding:22px 0}
+  .tabs{gap:6px;margin:16px 0 14px}
+  .tabs a{padding:8px 12px;font-size:13px}
+  /* 表格容器：可横滑。不加负边距，避免把 .wrap 的 padding 撑破 */
+  .tbl-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+  .atbl{min-width:640px;font-size:13px}
+  .atbl th,.atbl td{padding:10px 10px}
+  .c-cond{max-width:240px}
+  .mini{padding:8px 12px;font-size:13px;margin:0 4px 4px 0}
+}
 `;
 
 await rm(DIST, { recursive: true, force: true });

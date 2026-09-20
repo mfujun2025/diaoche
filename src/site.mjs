@@ -136,21 +136,23 @@ const priceBody = `
 <section class="wrap sec first">
   <h1 class="h1">吊车行情价格库</h1>
   <p class="lead">以下为各吨位二手吊车的常见成交价区间参考（按车龄与车况浮动）。实际成交受品牌、配置、地区与市场周期影响，务必以实车验车结论为准。</p>
-  <table class="tbl">
-    <thead><tr><th>吨位</th><th>常见车龄</th><th>价格区间（万元）</th><th>说明</th></tr></thead>
-    <tbody>
-      ${[
-        [8, '5~10 年', '4 ~ 12', '小型车，需求稳定，适合市政与小型工地'],
-        [12, '5~10 年', '6 ~ 18', '通用性较好，二手流通量最大'],
-        [16, '5~10 年', '9 ~ 25', '城区作业常见吨位'],
-        [25, '4~9 年', '14 ~ 42', '主力吨位，成交量集中'],
-        [35, '4~9 年', '20 ~ 58', '中大型项目常用'],
-        [50, '4~8 年', '32 ~ 90', '对车况与工时敏感度高'],
-        [80, '3~8 年', '55 ~ 160', '设备商与大型租赁公司为主'],
-        [100, '3~7 年', '80 ~ 260', '单价高，务必做第三方检测'],
-      ].map((r) => `<tr><td><strong>${r[0]} 吨</strong></td><td>${r[1]}</td><td class="em">${r[2]}</td><td>${r[3]}</td></tr>`).join('')}
-    </tbody>
-  </table>
+  <div class="tbl-wrap">
+    <table class="tbl">
+      <thead><tr><th>吨位</th><th>常见车龄</th><th>价格区间（万元）</th><th class="col-note">说明</th></tr></thead>
+      <tbody>
+        ${[
+          [8, '5~10 年', '4 ~ 12', '小型车，需求稳定，适合市政与小型工地'],
+          [12, '5~10 年', '6 ~ 18', '通用性较好，二手流通量最大'],
+          [16, '5~10 年', '9 ~ 25', '城区作业常见吨位'],
+          [25, '4~9 年', '14 ~ 42', '主力吨位，成交量集中'],
+          [35, '4~9 年', '20 ~ 58', '中大型项目常用'],
+          [50, '4~8 年', '32 ~ 90', '对车况与工时敏感度高'],
+          [80, '3~8 年', '55 ~ 160', '设备商与大型租赁公司为主'],
+          [100, '3~7 年', '80 ~ 260', '单价高，务必做第三方检测'],
+        ].map((r) => `<tr><td><strong>${r[0]} 吨</strong></td><td>${r[1]}</td><td class="em">${r[2]}</td><td class="col-note">${r[3]}</td></tr>`).join('')}
+      </tbody>
+    </table>
+  </div>
   <p class="tip">价格数据为公开信息整理，随市场波动，建议以近 30 天实际成交为参考基准。</p>
 </section>
 `;
@@ -182,10 +184,12 @@ const adminBody = `
     <a href="#" data-tab="rejected" onclick="return switchTab(event,'rejected')">已驳回<span class="n">0</span></a>
     <a href="#" data-tab="all" onclick="return switchTab(event,'all')">全部<span class="n">0</span></a>
   </div>
-  <table class="atbl">
-    <thead><tr><th>ID</th><th>车源</th><th>价格</th><th>状态</th><th>联系方式</th><th>提交时间</th><th>操作</th></tr></thead>
-    <tbody id="admin-body"></tbody>
-  </table>
+  <div class="tbl-wrap">
+    <table class="atbl">
+      <thead><tr><th>ID</th><th>车源</th><th>价格</th><th>状态</th><th>联系方式</th><th>提交时间</th><th>操作</th></tr></thead>
+      <tbody id="admin-body"></tbody>
+    </table>
+  </div>
 </section>
 `;
 

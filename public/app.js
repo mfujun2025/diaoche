@@ -16,8 +16,11 @@
       t.hours ? t.hours + '小时' : '',
       [t.province, t.city].filter(Boolean).join(' '),
     ].filter(Boolean);
-    const price =
-      t.price != null ? `<span class="t-price">${t.price}${t.price_unit || '万元'}</span>` : '<span class="t-price">面议</span>';
+    // 价格为 0 / 空时显示「面议」，避免出现「0万元」这种无效信息
+    const hasPrice = t.price != null && Number(t.price) > 0;
+    const price = hasPrice
+      ? `<span class="t-price">${t.price}${t.price_unit || '万元'}</span>`
+      : '<span class="t-price">面议</span>';
 
     // 图片：只取第一张做封面，key 由服务端生成，但仍做一次转义
     let imgs = [];
@@ -25,8 +28,9 @@
       imgs = Array.isArray(t.images) ? t.images : JSON.parse(t.images || '[]');
     } catch {}
     imgs = (imgs || []).filter((k) => typeof k === 'string' && k);
+    // onerror：图片取不到时整块撤掉，避免出现丑陋的裂图占位
     const thumb = imgs.length
-      ? `<div class="t-thumb"><img src="${IMG_BASE}/${esc(imgs[0])}" alt="${esc(name)}" loading="lazy">${
+      ? `<div class="t-thumb"><img src="${IMG_BASE}/${esc(imgs[0])}" alt="${esc(name)}" loading="lazy" onerror="this.closest('.t-thumb').remove()">${
           imgs.length > 1 ? `<span class="t-count">${imgs.length} 图</span>` : ''
         }</div>`
       : '';

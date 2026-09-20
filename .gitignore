@@ -4,3 +4,6 @@ dist/
 .dev.vars
 *.log
 .DS_Store
+
+# 本地无头浏览器验证的临时产物（截图、Edge profile）
+.shots/

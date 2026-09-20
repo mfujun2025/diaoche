@@ -16,7 +16,7 @@ p{margin:0 0 1em}
 /* header */
 .hd{position:sticky;top:0;z-index:20;background:rgba(255,255,255,.94);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
 .hd-in{display:flex;align-items:center;justify-content:space-between;height:62px}
-.logo{font-size:21px;font-weight:800;letter-spacing:-.5px}
+.logo{font-size:21px;font-weight:800;letter-spacing:-.5px;white-space:nowrap}
 .logo span{color:var(--brand)}
 .nav{display:flex;gap:26px;font-size:14.5px;color:var(--fg2)}
 .nav a:hover{color:var(--brand)}
@@ -74,10 +74,6 @@ p{margin:0 0 1em}
 .truck .t-count{position:absolute;right:8px;bottom:8px;background:rgba(0,0,0,.6);color:#fff;
   font-size:12px;padding:2px 7px;border-radius:12px}
 .truck .t-body{display:flex;flex-direction:column;gap:8px;flex:1;min-width:0}
-@media(max-width:520px){
-  .truck:has(.t-thumb){flex-direction:column}
-  .truck:has(.t-thumb) .t-thumb{width:100%;flex:1 1 auto}
-}
 .img-preview{display:flex;flex-wrap:wrap;gap:10px;margin:6px 0 4px}
 .img-preview .thumb{position:relative;width:92px;height:92px;border-radius:8px;overflow:hidden;
   border:1px solid var(--line);background:var(--bg2)}
@@ -133,12 +129,136 @@ p{margin:0 0 1em}
 .ft-d{max-width:720px;font-size:12.5px;line-height:1.6}
 .ft-c{margin:0;font-size:12.5px}
 
+/* ===== 移动端适配 =====
+   断点策略：
+   - 720px 以下：导航换行成第二行、表单单列、按钮加大
+   - 520px 以下：卡片竖排、字号进一步收紧
+*/
+
 @media(max-width:720px){
-  .hero{padding:44px 0 36px}
-  .hero h1{font-size:28px}
-  .nav{gap:16px;font-size:13.5px}
-  .hd-in{height:56px}
-  .form .row{grid-template-columns:1fr}
-  .cta-in{padding:30px 20px}
-  .sec{padding:38px 0}
+  /* 头部：logo 居中，导航均分一行（13px 下 5 项各约 74px，够放） */
+  .hd-in{height:auto;flex-direction:column;align-items:stretch;gap:0;padding-top:9px}
+  .hd-in .logo{font-size:19px;text-align:center;padding-bottom:7px}
+  .nav{
+    display:flex;justify-content:space-between;
+    gap:0;font-size:13px;
+    border-top:1px solid var(--line);
+    margin:0 -16px;padding:0 10px;
+  }
+  .nav a{
+    flex:0 1 auto;text-align:center;padding:10px 2px;
+    white-space:nowrap;
+  }
+
+  /* 区块与标题 */
+  .sec{padding:34px 0}
+  .first{padding-top:26px}
+  .hero{padding:34px 0 30px}
+  .hero h1{font-size:25px;letter-spacing:-.5px}
+  .hero .sub{font-size:14.5px}
+  .h1{font-size:23px}
+  .h2{font-size:19px;margin-bottom:16px}
+
+  /* 首页搜索：三个下拉各占一行，按钮满宽 */
+  .search{gap:8px;padding:12px;margin:18px 0 14px}
+  .search select,.search button{width:100%;min-width:0}
+  .search button{padding:13px 12px}
+
+  /* 吨位快捷入口：做成小标签块，换行排列更清爽 */
+  .quick{gap:8px;font-size:13px}
+  .quick a{
+    background:var(--bg2);border:1px solid var(--line);
+    border-radius:20px;padding:5px 12px;
+  }
+  .quick .hl{background:#fdecea;border-color:#f5c6c0}
+
+  /* 吨位卡片：两列紧凑 */
+  .chips{grid-template-columns:repeat(2,1fr);gap:10px}
+  .chip{padding:13px}
+
+  /* 车源卡片：单列 + 图片收窄
+     有图时走「小图 + 文字」横排，避免一张图吃掉大半屏、用户要滚很久 */
+  .grid{grid-template-columns:1fr;gap:12px}
+  .list{gap:10px}
+  .truck{padding:13px}
+  .truck:has(.t-thumb){flex-direction:row;gap:12px;align-items:flex-start}
+  .truck:has(.t-thumb) .t-thumb{width:112px;flex:0 0 112px;aspect-ratio:4/3}
+  .truck .t-body{gap:6px}
+  .truck .t-name{font-size:15px}
+  .truck .t-price{font-size:15px}
+  .truck .t-meta{font-size:12.5px;gap:8px}
+  .truck .t-cond{font-size:13px;padding-top:7px}
+  .truck .t-count{font-size:11px;padding:1px 6px;right:5px;bottom:5px}
+
+  /* 筛选栏：手机上改为两列网格，省纵向空间（4 个下拉从 4 行变 2 行） */
+  .filter{
+    display:grid;grid-template-columns:1fr 1fr;
+    gap:10px;padding:12px;margin:16px 0 20px;
+  }
+  .filter select,.filter button{width:100%;min-width:0}
+  /* 筛选按钮独占整行 */
+  .filter button{grid-column:1 / -1;padding:13px 12px}
+
+  /* CTA */
+  .cta-in{padding:26px 20px;gap:16px;flex-direction:column;align-items:stretch}
+  .cta-in .btn{width:100%}
+  .cta h3{font-size:18px}
+
+  /* 表格：手机上列多，隐藏次要「说明」列，让吨位/车龄/价格一屏看完；有余量的还可横滑 */
+  .tbl-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+  .tbl{min-width:0;width:100%;font-size:13px}
+  .tbl .col-note{display:none}
+  .tbl th,.tbl td{padding:11px 10px}
+
+  /* 页脚 */
+  .ft{margin-top:40px;padding:26px 0}
+
+  /* ===== 表单：移动端重点优化 ===== */
+  .form{gap:16px;margin-top:20px}
+  /* 两列在手机上依然保留 —— 字段短（吨位/年份等），并排更省纵向空间、减少滚动 */
+  .form .row{grid-template-columns:1fr 1fr;gap:12px}
+  .form select,.form input,.form textarea{
+    padding:12px 12px;
+    font-size:16px;   /* ≥16px 可避免 iOS Safari 聚焦时自动放大 */
+    border-radius:10px;
+    width:100%;
+  }
+  .form textarea{min-height:96px}
+  .form label{gap:6px;font-size:14px}
+  /* 复选框行：整行可点，点击区域更大 */
+  .form .check{
+    flex-direction:row;align-items:flex-start;gap:10px;
+    padding:12px 14px;background:var(--bg2);border-radius:10px;
+    font-size:14px;line-height:1.5;
+  }
+  .form .check input{width:20px;height:20px;margin:0;flex:0 0 20px;accent-color:var(--brand)}
+  /* 提交按钮满宽、加高 */
+  .btn{width:100%;padding:15px 24px;font-size:16px}
+  .form .btn{margin-top:10px}
+
+  /* 图片预览缩略图放大一点，方便点删除 */
+  .img-preview .thumb{width:84px;height:84px}
+  .img-preview .thumb-x{width:24px;height:24px;font-size:15px;top:2px;right:2px}
+}
+
+@media(max-width:520px){
+  /* 图片卡片保持横排小图（不要变成大竖图，那样一屏看不到两辆车） */
+  .truck:has(.t-thumb) .t-thumb{width:100px;flex:0 0 100px}
+  .hero h1{font-size:23px}
+  .logo{font-size:18px}
+  .wrap{padding:0 16px}
+  .nav{margin:0 -16px;padding:0 8px;font-size:12.5px}
+  .form .row{gap:10px}
+  .form select,.form input{padding:12px 10px}
+}
+
+/* 极小屏（<380px，如老的 iPhone SE）两列放不下，回到单列 */
+@media(max-width:379px){
+  .form .row{grid-template-columns:1fr;gap:14px}
+}
+
+/* 表单提交区：底部留白，避免被浏览器工具栏遮住 */
+@media(max-width:720px){
+  .form{padding-bottom:env(safe-area-inset-bottom,0)}
+  main{padding-bottom:8px}
 }
