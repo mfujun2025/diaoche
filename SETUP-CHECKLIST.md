@@ -1,10 +1,13 @@
 # Cloudflare 配置清单与现状
 
-> **当前状态：站点已上线 ✅，图片上传功能已发布并线上实测通过 ✅**
+> **当前状态：站点已上线 ✅，图片上传 + 显示全链路已打通 ✅**
 > 线上地址：<https://xn--bqr649k.cn/>（自定义域名已生效）· <https://diaoche-cn.pages.dev/>
-> 本次提交 `b6e4668`，CI 全绿（含 R2 绑定），R2 权限问题已解决。
+> 图片地址形如：`https://xn--bqr649k.cn/img/trucks/202609/xxxxxxxx.png`
 >
-> **剩余 2 项必须你手动做**：① 给 R2 桶配自定义域名（否则图片显示不出来）② 配 Access 保护后台（安全关键）。
+> **图片方案已于 2026-09-20 变更**：不再依赖 R2 自定义域名（CF 对中文域名有 bug），
+> 改走本站 Functions 代理 → **你不需要再做 R2 自定义域那一步了**。
+>
+> **剩余 1 项必须你手动做**：配 Access 保护后台（安全关键）。
 
 ---
 
@@ -27,27 +30,9 @@
 
 ---
 
-## 二、待你操作（2 项）
+## 二、待你操作（1 项）
 
-### ☐ 1. 给 R2 桶配自定义域名（图片功能必需）
-
-**为什么必须配**：R2 桶默认**私有**，`<img src="...">` 直接访问会 403。上传的图片要能显示，必须绑一个公开域名。
-
-**操作路径**：
-
-**R2 → `diaoche-images` → Settings → Public access → Custom Domains → `+ Add`**
-
-填：**`img.xn--bqr649k.cn`**
-
-> - **必须 punycode 形式**，不能写中文
-> - CF 会自动补 DNS 的 CNAME 记录；若提示需手动添加，把记录值发我确认
-> - 配好后图片地址形如 `https://img.xn--bqr649k.cn/trucks/202609/xxxxxxxx.png`
-
-**配完回我一声**，我验证图片能否正常访问。
-
----
-
-### ☐ 2. 创建 Access 应用保护后台（安全关键）
+### ☐ 创建 Access 应用保护后台（安全关键）
 
 ⚠️ **当前 `/admin/` 和 `/api/admin/*` 是公开可访问的**（代码层白名单也因 `ADMIN_EMAILS` 为空而未生效）。
 **在配好 Access 之前，不要往里面提交真实车源。**
@@ -73,7 +58,7 @@ Zero Trust → **Access → Applications → Add → Self-hosted**
 
 **策略（每个应用配一条）**：Action `Allow` → Include → **Emails** → 填你的邮箱
 
-### ☐ 3. 填 `ADMIN_EMAILS`（双保险）
+### ☐ 填 `ADMIN_EMAILS`（双保险）
 
 Pages 项目 → Settings → **Variables and Secrets** → 编辑 `ADMIN_EMAILS`，填你的邮箱（多个用逗号分隔）。
 
@@ -81,7 +66,7 @@ Pages 项目 → Settings → **Variables and Secrets** → 编辑 `ADMIN_EMAILS
 
 ---
 
-## 三、图片上传功能说明
+## 三、图片上传与显示方案
 
 ### 用户流程
 
@@ -90,7 +75,26 @@ Pages 项目 → Settings → **Variables and Secrets** → 编辑 `ADMIN_EMAILS
 3. 提交时**先传图**（`POST /api/upload`）拿到 key 列表，再带着 key 提交车源
 4. 车源进 `pending`，管理员审核通过后，前台卡片显示封面图 + 图片数量角标
 
-### 安全设计
+### 显示方案：Functions 代理（**不是** R2 自定义域名）
+
+图片展示走 `functions/img/[[path]].ts`，从 R2 读流返回：
+
+```
+https://xn--bqr649k.cn/img/trucks/202609/xxxxxxxx.png
+```
+
+**为什么不用 R2 自定义域名**：在 CF 上给中文域名（punycode）zone 绑 R2 自定义域，
+即使 zone 是 Full setup、DNS 记录干净，也会报
+`Must be a valid domain on cloudflare.com zone`。
+经排查（换子域名 `test.` 依旧报错、DNS 无残留记录、zone Active 且 Full setup）
+判断为 CF 对 punycode zone 的处理缺陷。改用本站 Functions 代理彻底绕开。
+
+**这个方案额外的好处**：
+- 域名统一（都在 `吊车.cn` 下），不用多一个子域
+- 以后要加防盗链、限流、水印，都在自己代码里，可控
+- 免费额度：Functions 每天 10 万次请求，对当前体量绰绰有余
+
+### 上传接口安全设计
 
 | 措施 | 说明 |
 | --- | --- |
@@ -100,6 +104,15 @@ Pages 项目 → Settings → **Variables and Secrets** → 编辑 `ADMIN_EMAILS
 | 数量限制 | 单次 ≤9 张 |
 | **服务端生成文件名** | `trucks/YYYYMM/<24位随机>.ext`，不含任何用户输入，防路径穿越 |
 | 频率限制 | 同 IP 每分钟最多 20 次上传请求（靠 `upload_log` 表） |
+
+### 图片读取接口安全设计
+
+| 措施 | 说明 |
+| --- | --- |
+| **key 白名单** | 只允许 `trucks/` 前缀 + 安全字符，显式拒 `..` |
+| 扩展名白名单 | 只映射 jpg/jpeg/png/webp/gif，其它一律 404 |
+| 缓存 | `Cache-Control: immutable` 一年 + ETag，走 CF CDN，极少回源 R2 |
+| 安全头 | `X-Content-Type-Options: nosniff` |
 
 ### 待办：上传接口的鉴权策略
 
@@ -120,15 +133,20 @@ Pages 项目 → Settings → **Variables and Secrets** → 编辑 `ADMIN_EMAILS
 | 首页 `https://xn--bqr649k.cn/` | ✅ HTTP 200 |
 | `GET /api/trucks` | ✅ HTTP 200 |
 | 预览域 `https://diaoche-cn.pages.dev/` | ✅ HTTP 200 |
-| **上传正常 PNG** | ✅ 返回 `trucks/202609/d9fbd42d....png` |
+| **上传正常 PNG** | ✅ 返回 `trucks/202609/96f70f41....png` |
+| **`/img/` 代理读图** | ✅ HTTP 200，`image/png`，**字节与原图完全一致** |
+| 图片响应头 | ✅ `nosniff` + long cache |
 | 伪造 PNG（文本伪装成 image/png） | ✅ 拦截：`只支持 JPG / PNG / WebP / GIF 图片` |
 | 6MB 超大文件 | ✅ 拦截：`单张图片不能超过 5MB` |
 | 空请求（非 multipart） | ✅ 拦截：`请求需为 multipart/form-data` |
 | `POST /api/submit`（带 images 数组） | ✅ 提交成功，落库为 JSON 数组 |
 | 提交后前台列表 | ✅ `total: 0`（pending 审核隔离生效） |
-| **R2 图片对外访问** | ❌ `img.xn--bqr649k.cn` **DNS 未解析** —— 卡在第 2 节第 1 项 |
+| 不存在的图片 key | ✅ 404 |
+| 非 `trucks/` 前缀 | ✅ 404 |
+| 非图片扩展名（`.txt`） | ✅ 404 |
+| ETag 条件请求 | ✅ 返回 304 |
 
-> 结论：**代码侧全部正常**，唯一卡住图片显示的就是 R2 自定义域名那一步。
+> 结论：**上传 + 显示全链路已在生产环境验证通过。**
 
 ---
 
@@ -146,7 +164,7 @@ Pages 项目 → Settings → **Variables and Secrets** → 编辑 `ADMIN_EMAILS
 
 | 项 | 状态 |
 | --- | --- |
-| 代码推送 | ✅ 完成（`b6e4668`） |
+| 代码推送 | ✅ 完成（`b4fa3cf`） |
 | CI 流水线 | ✅ 全绿通过（含 R2 绑定） |
 | Node 22 + wrangler 4 | ✅ 已修正 |
 | GitHub Secrets | ✅ 已配置 |
@@ -154,12 +172,12 @@ Pages 项目 → Settings → **Variables and Secrets** → 编辑 `ADMIN_EMAILS
 | R2 桶 + 权限 + 绑定 | ✅ 完成 |
 | Pages 项目 + 部署 | ✅ 已上线 |
 | **自定义域名 `吊车.cn`** | ✅ **已绑定生效** |
-| 图片上传功能 | ✅ 代码完成 + **线上实测通过** |
-| **R2 图片对外访问** | ⬜ **待你配自定义域名** |
+| 图片上传 | ✅ 代码完成 + 线上实测通过 |
+| **图片显示（代理方案）** | ✅ **代码完成 + 线上实测通过** |
 | Access 保护后台 | ⬜ **待你配置（安全关键）** |
-| `ADMIN_EMAILS` | ⬜ **待你填写**（注意见下方提示） |
+| `ADMIN_EMAILS` | ⬜ **待你填写**（见下方提醒） |
 | 上传接口鉴权 | ⬜ 待你定策略（Access 或 Turnstile） |
-| 清理线上测试车源 | ⬜ 1 条 pending 测试数据（前台不可见，无影响） |
+| 清理线上测试数据 | ⬜ 2 条 pending 测试车源（前台不可见，无影响） |
 
 ### ⚠️ 关于 `ADMIN_EMAILS` 的提醒
 

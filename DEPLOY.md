@@ -89,20 +89,20 @@ npx wrangler d1 execute diaoche-db --file=./schema.sql --remote
 
 > ⚠️ 线上运行必须用 `--remote`，否则 CF 线上库没有表，提交表单会 500。
 
-### 3.2 创建 R2 存储桶（图片用，可后置）
+### 3.2 创建 R2 存储桶（图片用）
 
-> **当前状态：已禁用**。项目 `wrangler.toml` 中的 R2 段已注释。
-> 原因：CF API Token 缺 `Workers R2 Storage / Edit` 权限，会导致 Functions 发布失败
-> （`R2 bucket 'diaoche-images' not found`）。项目 `functions/` 代码零引用 `env.IMAGES`，禁用无影响。
->
-> **恢复三步**：① token 加 R2 权限 → ② 建桶 → ③ 取消 `wrangler.toml` 注释并同步更新 GitHub Secret。
+> **当前状态：已完成**。桶名 `diaoche-images`，Pages 已绑定 `IMAGES`（production + preview）。
+> Token 权限问题已解决，CI 带 R2 绑定可正常发布。
 
 控制台 → **R2** → Create bucket → 名称 `diaoche-images`
 
-建议给桶绑一个自定义子域，例如 `img.xn--bqr649k.cn`，用于生产环境图片访问。
-不要直接用 `r2.dev` 域名，有速率限制，不适合生产。
+> ⚠️ **不要给这个桶绑自定义域名**（至少中文域名别绑）。
+> 实测在 punycode zone（`xn--bqr649k.cn`）上绑 R2 自定义域会报
+> `Must be a valid domain on cloudflare.com zone`，即使 zone 是 Full setup、
+> DNS 干净、换个 `test.` 子域名也一样，判断是 CF 的缺陷。
+> 图片展示改用 Functions 代理 → 见 3.7 节。
 
-> ⚠️ 改完 token 权限后，**必须同步更新 GitHub Secret** `CLOUDFLARE_API_TOKEN`，
+> ⚠️ 改 token 权限后，**必须同步更新 GitHub Secret** `CLOUDFLARE_API_TOKEN`，
 > 否则 CI 用的还是旧 token，依然没权限。
 
 ### 3.3 创建 Cloudflare Pages 项目
@@ -204,7 +204,69 @@ Cloudflare Pages → 项目 → **Settings → Variables and Secrets** 添加：
 
 #### 为什么前台不受影响
 
-`public/_routes.json` 已声明只对 `/api/*` 走 Functions，静态页直出 CDN，Access 规则也只挂在 `/admin` 和 `/api/admin` 两条路径上——**首页、车源大厅等前台页面访问速度完全不受影响**。
+`public/_routes.json` 已声明只对 `/api/*` 和 `/img/*` 走 Functions，静态页直出 CDN，Access 规则也只挂在 `/admin` 和 `/api/admin` 两条路径上——**首页、车源大厅等前台页面访问速度完全不受影响**。
+
+---
+
+### 3.7 图片访问：Functions 代理
+
+> **当前状态：已完成**。图片地址形如 `https://xn--bqr649k.cn/img/trucks/202609/xxxxxxxx.png`
+
+#### 为什么不用 R2 自定义域名
+
+在 CF 控制台给 R2 桶绑自定义域名时（R2 → 桶 → Settings → Public access → Custom Domains），
+在中文域名（punycode）zone 上会稳定报：
+
+```
+Must be a valid domain on cloudflare.com zone (example.com, sub.example.com)
+```
+
+**已排查排除的因素**：
+
+| 怀疑点 | 实际情况 |
+|---|---|
+| 输入带隐藏字符 | ❌ 换 `test.xn--bqr649k.cn` 手打同样报错 |
+| DNS 有残留错误记录 | ❌ DNS 只有 2 条正确记录，无 `img` 残留 |
+| zone 不在该账号 | ❌ zone 在账号内且 Active |
+| zone 是部分接入 | ❌ DNS Setup 显示 **Full** |
+
+结论：判断为 CF 对 punycode zone 的 R2 自定义域校验缺陷。**改用 Functions 代理绕开。**
+
+#### 实现
+
+`functions/img/[[path]].ts` —— catch-all 路由，从 R2 读流返回：
+
+```ts
+const segs = ctx.params.path;                    // ["trucks","202609","abc.png"]
+const key = [].concat(segs).join('/');
+if (!/^trucks\/[A-Za-z0-9._\/-]+$/.test(key)) return 404;  // 白名单，拒 .. 与其它前缀
+const obj = await ctx.env.IMAGES.get(key);
+return new Response(obj.body, {
+  headers: {
+    'Content-Type': mime,
+    'Cache-Control': 'public, max-age=31536000, immutable',
+    ETag: obj.httpEtag,
+    'X-Content-Type-Options': 'nosniff',
+  },
+});
+```
+
+配套改动：
+
+- `public/_routes.json` → `include: ["/api/*", "/img/*"]`（**必须加，否则请求到不了 Function**）
+- `public/app.js` → `IMG_BASE = '/img'`（相对路径，同域无 CORS）
+
+#### 这个方案的好处
+
+- 不依赖 R2 自定义域，绕开 CF 缺陷
+- 域名统一（都在 `吊车.cn` 下），不用多个子域
+- 以后加防盗链、限流、水印都在自己代码里
+- 免费额度：Functions 每天 10 万次请求，当前体量绰绰有余
+
+#### 注意事项
+
+- 免费额度用尽后 Functions 会停，图片就 404。用 `Cache-Control: immutable` 让 CDN 扛住绝大部分请求
+- key 白名单**必须保留**，否则可通过构造 key 读取桶内其它对象
 
 ---
 
@@ -429,7 +491,7 @@ npx wrangler d1 execute diaoche-db --remote \
 ### 优化建议（不备案的前提下）
 
 1. **前端尽量做静态化**：本项目已是纯静态 + 样式内联，无 JS 框架开销，这是免备案方案下最优的形态
-2. **图片走 R2 + 自定义域**，并开启 Cloudflare 的自动压缩（Polish / WebP）
+2. **图片走 R2 + Functions 代理**（`/img/<key>`），可开启 Cloudflare 的自动压缩（Polish / WebP）
 3. **优先做 SEO 长尾**，不依赖微信裂变和国内信息流投放
 4. **若后期必须国内加速**：可评估 Cloudflare 的中国网络服务（企业版付费），或改为国内云 + 备案 —— 但那就推翻了当前的零成本架构，需重新权衡
 

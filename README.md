@@ -4,8 +4,8 @@
 
 仓库：`mfujun2025/diaoche`
 
-> **线上状态**：已部署 ✅ → https://diaoche-cn.pages.dev/
-> 待办：自定义域名绑定 + Access 保护后台（见 [SETUP-CHECKLIST.md](./SETUP-CHECKLIST.md)）
+> **线上状态**：已部署 ✅ → https://xn--bqr649k.cn/
+> 待办：Access 保护后台（见 [SETUP-CHECKLIST.md](./SETUP-CHECKLIST.md)）
 
 ## 方向定位
 
@@ -35,7 +35,10 @@
 - **托管**：Cloudflare Pages（全球 CDN）
 - **API**：Cloudflare Pages Functions（`functions/api/trucks.ts`、`submit.ts`、`upload.ts`、`admin/*`）
 - **数据库**：D1（SQLite），表结构见 `schema.sql`
-- **对象存储**：R2（车况图片，单张 ≤5MB、最多 9 张，走 `img.xn--bqr649k.cn` 自定义域）
+- **对象存储**：R2（车况图片，单张 ≤5MB、最多 9 张）
+  - 上传：`POST /api/upload`（magic bytes 校验 + 限流）
+  - 读取：`GET /img/<key>` → `functions/img/[[path]].ts` 代理读流
+  - **不用 R2 自定义域**：CF 对中文域名（punycode）zone 有校验缺陷，会报 `Must be a valid domain`
 - **CI/CD**：GitHub Actions（`.github/workflows/deploy.yml`）
 - **后台鉴权**：Cloudflare Access（Zero Trust）+ 代码层邮箱白名单双保险
 
@@ -43,7 +46,7 @@
 
 - **免 ICP 备案**：全链路境外节点（Cloudflare + GitHub），不触发备案要求
 - **零成本**：GitHub Actions + Cloudflare 免费额度完全覆盖，0 元/月（不含域名年费）
-- **前台不受鉴权影响**：`_routes.json` 限定只有 `/api/*` 走 Functions，静态页直出 CDN
+- **前台不受鉴权影响**：`_routes.json` 限定只有 `/api/*` 和 `/img/*` 走 Functions，静态页直出 CDN
 
 ## 常用命令
 
