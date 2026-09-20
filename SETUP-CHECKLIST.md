@@ -274,6 +274,7 @@ https://xn--bqr649k.cn/img/trucks/202609/xxxxxxxx.png
 | 上传接口鉴权 | ⬜ 待你定策略（Access 或 Turnstile） |
 | 清理线上测试数据 | ⬜ 2 条 pending 测试车源（前台不可见，无影响） |
 | 删除临时 CF token | ⬜ `cfut_Urh2...`、`cfut_zRdge...`（都已用完） |
+| **修 `www` 前缀 522** | ⬜ 待加 DNS 记录（`www` CNAME → `diaoche-cn.pages.dev`，橙云） |
 
 ### 最终线上验证（2026-09-21）
 
@@ -297,5 +298,23 @@ https://xn--bqr649k.cn/img/trucks/202609/xxxxxxxx.png
 2. 填邮箱 `548827878@qq.com`
 3. 收 6 位验证码邮件 → 填入
 4. 进入后台，可审核车源
+
+#### ⚠️ 必须用 punycode 地址，否则会 522
+
+**不要输中文「吊车.cn」** —— 浏览器会自动补全成 `www.吊车.cn`，而 `www` 前缀没有配置，结果就是 **522 连接超时**，看起来像后台坏了，实际根本没访问到站点。
+
+**正确做法**：在地址栏粘贴这条（含 `https://`），浏览器不会改写 punycode：
+
+```
+https://xn--bqr649k.cn/admin/
+```
+
+如果浏览器仍然补成 `www.`，在地址栏输入 `www.吊车.cn` 等下拉提示出现时按 **Shift + Delete** 删掉那条历史记录。
+
+**备用入口**（不依赖主域名，Access 同样保护）：
+
+```
+https://diaoche-cn.pages.dev/admin/
+```
 
 > 用的是 **One-time PIN** 方式，不需要额外配 Google/GitHub 登录。
