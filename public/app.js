@@ -6,7 +6,8 @@
     String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
   const BIZ_LABEL = { sale: '转让', rent: '出租', buy: '求购' };
-  const IMG_BASE = 'https://img.xn--bqr649k.cn';
+  // 图片走本站 Functions 代理（functions/img/[[path]].ts），不依赖 R2 自定义域
+  const IMG_BASE = '/img';
 
   function truckCard(t) {
     const name = `${t.tonnage}吨 ${t.brand}${t.model ? ' ' + t.model : ''}`;
