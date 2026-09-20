@@ -1,0 +1,21 @@
+{
+  "name": "diaoche-cn",
+  "version": "1.0.0",
+  "private": true,
+  "description": "吊车.cn — 二手吊车转让信息平台",
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "dev": "node scripts/build.mjs && node scripts/serve.mjs",
+    "preview": "npx wrangler pages dev dist",
+    "db:init": "npx wrangler d1 execute diaoche-db --file=./schema.sql --remote",
+    "db:init:local": "npx wrangler d1 execute diaoche-db --file=./schema.sql --local",
+    "db:pending": "npx wrangler d1 execute diaoche-db --remote --command \"SELECT id, tonnage, brand, contact, status FROM trucks WHERE status='pending'\""
+  },
+  "devDependencies": {
+    "wrangler": "^4.135.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

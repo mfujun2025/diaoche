@@ -1,0 +1,5 @@
+# 本地开发变量模板（复制为 .dev.vars 使用，该文件已被 .gitignore 忽略）
+# 注意：wrangler.toml 里的 [vars] 是"生产默认值"，
+#       本地覆盖要写在 .dev.vars，改完必须重启 wrangler 才生效。
+
+ADMIN_EMAILS=your-email@example.com

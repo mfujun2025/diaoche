@@ -1,0 +1,21 @@
+# Cloudflare Pages 项目配置
+# 注意：D1 之后通过控制台创建，用 `wrangler d1 create diaoche-db` 拿到 database_id 再填回来
+name = "diaoche-cn"
+compatibility_date = "2026-09-01"
+pages_build_output_dir = "dist"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "diaoche-db"
+database_id = "REPLACE_WITH_YOUR_D1_DATABASE_ID"
+
+[[r2_buckets]]
+binding = "IMAGES"
+bucket_name = "diaoche-images"
+
+[vars]
+ENV = "production"
+SITE_NAME = "吊车.cn"
+# 后台审核白名单（逗号分隔）。留空则任何通过 Cloudflare Access 的账号都能审核。
+# 强烈建议填上你自己的邮箱，做双重保险。
+ADMIN_EMAILS = ""
