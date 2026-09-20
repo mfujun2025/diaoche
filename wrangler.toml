@@ -9,9 +9,13 @@ binding = "DB"
 database_name = "diaoche-db"
 database_id = "a7eb7c3b-d557-4da8-8d8e-982a874ae3f5"
 
-[[r2_buckets]]
-binding = "IMAGES"
-bucket_name = "diaoche-images"
+# R2 图片存储（后置启用）
+# 启用前提：Cloudflare API Token 需含 Account / Workers R2 Storage / Edit 权限，
+# 且在 CF 控制台 R2 → Create bucket 建好 diaoche-images 桶。
+# 建好后取消下面注释并重新部署即可。
+# [[r2_buckets]]
+# binding = "IMAGES"
+# bucket_name = "diaoche-images"
 
 [vars]
 ENV = "production"
