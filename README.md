@@ -4,6 +4,9 @@
 
 仓库：`mfujun2025/diaoche`
 
+> **线上状态**：已部署 ✅ → https://diaoche-cn.pages.dev/
+> 待办：自定义域名绑定 + Access 保护后台（见 [SETUP-CHECKLIST.md](./SETUP-CHECKLIST.md)）
+
 ## 方向定位
 
 三者不是单选，是主次结构：
@@ -32,7 +35,7 @@
 - **托管**：Cloudflare Pages（全球 CDN）
 - **API**：Cloudflare Pages Functions（`functions/api/submit.ts`、`functions/api/trucks.ts`）
 - **数据库**：D1（SQLite），表结构见 `schema.sql`
-- **对象存储**：R2（图片，二期接入）
+- **对象存储**：R2（图片，二期接入；当前 `wrangler.toml` 中已注释，原因见 SETUP-CHECKLIST）
 - **CI/CD**：GitHub Actions（`.github/workflows/deploy.yml`）
 - **后台鉴权**：Cloudflare Access（Zero Trust）+ 代码层邮箱白名单双保险
 

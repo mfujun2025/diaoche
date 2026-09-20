@@ -91,18 +91,29 @@ npx wrangler d1 execute diaoche-db --file=./schema.sql --remote
 
 ### 3.2 创建 R2 存储桶（图片用，可后置）
 
+> **当前状态：已禁用**。项目 `wrangler.toml` 中的 R2 段已注释。
+> 原因：CF API Token 缺 `Workers R2 Storage / Edit` 权限，会导致 Functions 发布失败
+> （`R2 bucket 'diaoche-images' not found`）。项目 `functions/` 代码零引用 `env.IMAGES`，禁用无影响。
+>
+> **恢复三步**：① token 加 R2 权限 → ② 建桶 → ③ 取消 `wrangler.toml` 注释并同步更新 GitHub Secret。
+
 控制台 → **R2** → Create bucket → 名称 `diaoche-images`
 
 建议给桶绑一个自定义子域，例如 `img.xn--bqr649k.cn`，用于生产环境图片访问。
 不要直接用 `r2.dev` 域名，有速率限制，不适合生产。
 
+> ⚠️ 改完 token 权限后，**必须同步更新 GitHub Secret** `CLOUDFLARE_API_TOKEN`，
+> 否则 CI 用的还是旧 token，依然没权限。
+
 ### 3.3 创建 Cloudflare Pages 项目
+
+> **当前状态：已创建**，项目名 `diaoche-cn`，production branch = `main`。
 
 控制台 → **Workers & Pages → Create → Pages → Connect to Git**
 
 - 选择仓库：`mfujun2025/diaoche`
 - 分支：`main`
-- 构建命令：`node scripts/build.mjs`
+- 构建命令：**留空**（构建交给 GitHub Actions，避免重复构建）
 - 构建输出目录：`dist`
 
 > 到这里其实已经能自动部署了。但为了更可控，我们**用 GitHub Actions 触发部署**（第 4 步），
