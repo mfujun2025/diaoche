@@ -17,5 +17,5 @@ bucket_name = "diaoche-images"
 ENV = "production"
 SITE_NAME = "吊车.cn"
 # 后台审核白名单（逗号分隔）。留空则任何通过 Cloudflare Access 的账号都能审核。
-# 强烈建议填上你自己的邮箱，做双重保险。
-ADMIN_EMAILS = ""
+# 必须与 Zero Trust 应用策略里的邮箱一致，否则会出现「Access 放行但代码层拒绝」。
+ADMIN_EMAILS = "548827878@qq.com"
