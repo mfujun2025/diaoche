@@ -3,6 +3,7 @@
 > 目标是让 GitHub Actions 能成功部署。当前 CI 状态：**前 6 步全绿，只差最后一步的凭证**。
 >
 > 最后一步报错原文：
+>
 > ```
 > ✘ [ERROR] In a non-interactive environment, it's necessary to set
 >   a CLOUDFLARE_API_TOKEN environment variable for wrangler to work.
@@ -18,10 +19,12 @@
 
 点 **New repository secret**，加两条：
 
-| Name（必须完全一致） | Value |
-|---|---|
-| `CLOUDFLARE_API_TOKEN` | 见下方第二步创建 |
+| Name（必须完全一致）            | Value    |
+| ----------------------- | -------- |
+| `CLOUDFLARE_API_TOKEN`  | 见下方第二步创建 |
 | `CLOUDFLARE_ACCOUNT_ID` | 见下方第一步获取 |
+
+
 
 > ⚠️ Name 大小写、下划线都要一模一样，写错了 CI 会报同样的错。
 
@@ -37,13 +40,13 @@ Cloudflare 控制台 → 右侧栏 **Account ID** → 复制
 
 按下表配置权限：
 
-| 区域 | 权限 | 级别 |
-|---|---|---|
-| Account | Cloudflare Pages | Edit |
-| Account | D1 | Edit |
+| 区域      | 权限                 | 级别   |
+| ------- | ------------------ | ---- |
+| Account | Cloudflare Pages   | Edit |
+| Account | D1                 | Edit |
 | Account | Workers R2 Storage | Edit |
 
-**Account Resources**：选你的账号
+**Account Resources**：选你的账号  
 **Zone Resources**：选 `吊车.cn`（或 All zones）
 
 创建后**立即复制**（只显示一次），填到上面的 `CLOUDFLARE_API_TOKEN`。
@@ -80,6 +83,7 @@ npx wrangler d1 execute diaoche-db --file=./schema.sql --remote
 `R2` → Create bucket → 名称 `diaoche-images`
 
 建议绑自定义子域（如 `img.xn--bqr649k.cn`）用于图片访问。
+
 > 不要直接用 `r2.dev` 域名，有速率限制，不适合生产。
 
 ### ☐ 7. 创建 Pages 项目
@@ -109,12 +113,14 @@ Pages 项目 → **Custom domains** → Set up a domain
 Zero Trust → **Access → Applications → Add → Self-hosted**
 
 **应用 A（生产域名）**
+
 - Name：`diaoche-admin`
 - Public hostname：裸域 `xn--bqr649k.cn`
 - Path：`admin`
 - **再加一条**：Path 填 `api/admin`
 
 **应用 B（预览域名 —— 千万别漏）**
+
 - Name：`diaoche-admin-preview`
 - Subdomain：`diaoche-cn`
 - Domain：`pages.dev`
@@ -126,6 +132,7 @@ Zero Trust → **Access → Applications → Add → Self-hosted**
 ### ☐ 10. 建策略
 
 每个应用配一条 Policy：
+
 - Action：`Allow`
 - Include → **Emails** → 填你的邮箱
 
@@ -133,8 +140,8 @@ Zero Trust → **Access → Applications → Add → Self-hosted**
 
 Pages 项目 → Settings → **Variables and Secrets**：
 
-| 变量 | 值 |
-|---|---|
+| 变量             | 值             |
+| -------------- | ------------- |
 | `ADMIN_EMAILS` | 你的邮箱（多个用逗号分隔） |
 
 > 代码里还有一层邮箱白名单校验，即使 Access 被绕过也拦得住。
@@ -152,6 +159,7 @@ Pages 项目 → Settings → **Variables and Secrets**：
 ### ☐ 13. 按 DEPLOY.md 第 7 节做端到端验证
 
 关键三项：
+
 - 提交一条测试车源 → 前台**看不到**（pending 状态）
 - 访问 `/admin/` → 要求登录
 - 后台点「通过」→ 前台能看到
@@ -160,11 +168,11 @@ Pages 项目 → Settings → **Variables and Secrets**：
 
 ## 当前进度
 
-| 项 | 状态 |
-|---|---|
-| 代码推送 | ✅ 完成（22 文件） |
-| CI 流水线 | ✅ 前 6 步全绿，只差凭证 |
-| Node 22 + wrangler 4 | ✅ 已修正 |
-| GitHub Secrets | ⬜ **待你配置** |
-| Cloudflare 资源 | ⬜ 待创建 |
-| Access 保护 | ⬜ 待配置 |
+| 项                    | 状态             |
+| -------------------- | -------------- |
+| 代码推送                 | ✅ 完成（22 文件）    |
+| CI 流水线               | ✅ 前 6 步全绿，只差凭证 |
+| Node 22 + wrangler 4 | ✅ 已修正          |
+| GitHub Secrets       | ⬜ **待你配置**     |
+| Cloudflare 资源        | ⬜ 待创建          |
+| Access 保护            | ⬜ 待配置          |
