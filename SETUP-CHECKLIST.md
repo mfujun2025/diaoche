@@ -1,13 +1,13 @@
 # Cloudflare 配置清单与现状
 
-> **当前状态：站点已上线 ✅，图片上传 + 显示全链路已打通 ✅**
+> **当前状态：站点已上线 ✅，图片上传 + 显示全链路已打通 ✅，后台 Access 防护已生效 ✅**
 > 线上地址：<https://xn--bqr649k.cn/>（自定义域名已生效）· <https://diaoche-cn.pages.dev/>
 > 图片地址形如：`https://xn--bqr649k.cn/img/trucks/202609/xxxxxxxx.png`
 >
 > **图片方案已于 2026-09-20 变更**：不再依赖 R2 自定义域名（CF 对中文域名有 bug），
 > 改走本站 Functions 代理 → **你不需要再做 R2 自定义域那一步了**。
 >
-> **剩余 1 项必须你手动做**：配 Access 保护后台（安全关键）。
+> **剩余 1 项必须你手动做**：填 `ADMIN_EMAILS`（第二层防护）。
 
 ---
 
@@ -24,45 +24,84 @@
 | R2 绑定 | ✅ Pages 项目 production + preview 双环境 |
 | Pages 项目 | ✅ `diaoche-cn`，production branch = `main` |
 | **自定义域名** | ✅ **`xn--bqr649k.cn` 已绑定，状态 active** |
-| 环境变量 | ✅ `ENV` / `SITE_NAME` / `ADMIN_EMAILS` |
+| 环境变量 | ✅ `ENV` / `SITE_NAME`（`ADMIN_EMAILS` 仍为空） |
 | CI 流水线 | ✅ 全绿，静态页 + Functions 均已发布 |
 | 图片上传功能 | ✅ 前端选图 + 后端 `/api/upload` + 卡片显示封面 |
+| **Access 保护后台** | ✅ **已生效（2026-09-21 配好并验证）** |
 
 ---
 
 ## 二、待你操作（1 项）
 
-### ☐ 创建 Access 应用保护后台（安全关键）
-
-⚠️ **当前 `/admin/` 和 `/api/admin/*` 是公开可访问的**（代码层白名单也因 `ADMIN_EMAILS` 为空而未生效）。
-**在配好 Access 之前，不要往里面提交真实车源。**
-
-Zero Trust → **Access → Applications → Add → Self-hosted**
-
-**应用 A（生产域名）**
-
-- Name：`diaoche-admin`
-- Public hostname：裸域 `xn--bqr649k.cn`
-- Path：`admin`
-- **再加一条** Path：`api/admin`
-
-**应用 B（预览域名 —— 千万别漏）**
-
-- Name：`diaoche-admin-preview`
-- Subdomain：`diaoche-cn`，Domain：`pages.dev`
-- Path：`admin`
-- **再加一条** Path：`api/admin`
-
-> ⚠️ 只保护生产域名 = 留后门。`.pages.dev` 是公开可达的，任何人都能从那里进后台。
-> Access（Zero Trust）**只能网页端配置**，API 做不了。
-
-**策略（每个应用配一条）**：Action `Allow` → Include → **Emails** → 填你的邮箱
-
-### ☐ 填 `ADMIN_EMAILS`（双保险）
+### ☐ 填 `ADMIN_EMAILS`（第二层防护）
 
 Pages 项目 → Settings → **Variables and Secrets** → 编辑 `ADMIN_EMAILS`，填你的邮箱（多个用逗号分隔）。
 
 > 代码里还有一层邮箱白名单校验，即使 Access 被绕过也拦得住。**目前为空 = 这层没生效。**
+> 填**和 Access 策略里同一个邮箱**（`548827878@qq.com`）。
+
+---
+
+## 二·五、Access 配置记录（已完成，供日后回溯）
+
+**Zero Trust 组织**：Team name `mfujun`，Team domain `mfujun.cloudflareaccess.com`，Free 计划
+
+**应用**：`吊车.cn`（id `ac961fd9-c24d-4d93-ab26-071a2c4346b6`），type `self_hosted`
+
+**Destinations（4 条）**：
+
+```
+吊车.cn                    /admin
+吊车.cn                    /api/admin
+diaoche-cn.pages.dev       /admin
+diaoche-cn.pages.dev       /api/admin
+```
+
+**策略**：`allow-me` → Action `Allow` → Include → Emails → `548827878@qq.com`
+
+### ⚠️ 配置时的关键坑（务必记住）
+
+**在 Zero Trust 网页界面填 Destinations 时，如果「域名」和「路径」两栏被合并成一个输入框（`Switch to custom input` 模式），很容易把 `域名/admin + api/admin` 整串填进 Domain 字段。**
+
+后果是 Access 拿这整串去匹配请求的 Host 头，**永远匹配不上 → 策略形同虚设，但界面上看起来完全正常**（Policies 列显示 `allow-me`，Destinations 有内容）。
+
+这个坑排查了很久，因为它**在 UI 上完全看不出来**。判断方法：用 API 读 `/accounts/{id}/access/apps`，看 `self_hosted_domains` 数组里每个元素是不是**独立的「域名/路径」**。
+
+**正确格式**（API 层）：
+
+```json
+"self_hosted_domains": [
+  "xn--bqr649k.cn/admin",
+  "xn--bqr649k.cn/api/admin",
+  "diaoche-cn.pages.dev/admin",
+  "diaoche-cn.pages.dev/api/admin"
+]
+```
+
+**修复命令**（`PUT` 是覆盖式，必须带上 `type` 和 `name`，否则报 `12130 app type is missing`）：
+
+```
+PUT /accounts/{account_id}/access/apps/{app_id}
+{
+  "name": "吊车.cn",
+  "type": "self_hosted",
+  "domain": "xn--bqr649k.cn/admin",
+  "self_hosted_domains": [...],
+  "session_duration": "24h"
+}
+```
+
+> CF 会把 `xn--bqr649k.cn` 自动规范化显示为 `吊车.cn`，这是正常的。
+
+### 验证方法
+
+Access 生效时，未登录访问会返回 **302**，Location 指向：
+
+```
+https://mfujun.cloudflareaccess.com/cdn-cgi/access/login/<hostname>?kid=<aud>&redirect_url=...
+```
+
+**判据：状态码必须是 302，不是 200。** 200 就说明没拦住。
 
 ---
 
@@ -175,13 +214,27 @@ https://xn--bqr649k.cn/img/trucks/202609/xxxxxxxx.png
 
 ---
 
+### Access 生效实测（2026-09-21）
+
+| 路径 | 结果 |
+| --- | --- |
+| `https://xn--bqr649k.cn/admin/` | ✅ **302** → `mfujun.cloudflareaccess.com/cdn-cgi/access/login/...` |
+| `https://xn--bqr649k.cn/api/admin/list` | ✅ **302** → 同上 |
+| `https://diaoche-cn.pages.dev/admin/` | ✅ **302** → 同上 |
+| `https://diaoche-cn.pages.dev/api/admin/list` | ✅ **302** → 同上 |
+| 前台 `/` `/trucks/` `/sell/` `/price/` `/guide/` | ✅ 全部 200，**未被误伤** |
+
+> 判据：Access 生效时返回 **302**（跳登录页），未生效时返回 200。两个域名（生产 + 预览）都已覆盖。
+
+---
+
 ## 五、验收清单
 
 按 `DEPLOY.md` 第 7 节做端到端验证，关键三项：
 
 - 提交一条测试车源 → 前台**看不到**（pending 状态）✅ 线上已实测
-- 访问 `/admin/` → **要求登录**（Access 拦截）⬜ 待 Access 配好后验
-- 后台点「通过」→ 前台能看到 ✅ 本地已实测（线上待 Access 配好后可验）
+- 访问 `/admin/` → **要求登录**（Access 拦截）✅ **线上已实测（302 跳转）**
+- 后台点「通过」→ 前台能看到 ✅ 本地已实测（线上需你先用邮箱登录一次后台才能验）
 
 ---
 
@@ -189,7 +242,7 @@ https://xn--bqr649k.cn/img/trucks/202609/xxxxxxxx.png
 
 | 项 | 状态 |
 | --- | --- |
-| 代码推送 | ✅ 完成（`b4fa3cf`） |
+| 代码推送 | ✅ 完成 |
 | CI 流水线 | ✅ 全绿通过（含 R2 绑定） |
 | Node 22 + wrangler 4 | ✅ 已修正 |
 | GitHub Secrets | ✅ 已配置 |
@@ -200,7 +253,7 @@ https://xn--bqr649k.cn/img/trucks/202609/xxxxxxxx.png
 | 图片上传 | ✅ 代码完成 + 线上实测通过 |
 | **图片显示（代理方案）** | ✅ **代码完成 + 线上实测通过** |
 | **移动端适配** | ✅ **代码完成 + 线上实测通过（7 页零溢出）** |
-| Access 保护后台 | ⬜ **待你配置（安全关键）** |
+| **Access 保护后台** | ✅ **已生效 + 线上实测通过（4 路径 302）** |
 | `ADMIN_EMAILS` | ⬜ **待你填写**（见下方提醒） |
 | 上传接口鉴权 | ⬜ 待你定策略（Access 或 Turnstile） |
 | 清理线上测试数据 | ⬜ 2 条 pending 测试车源（前台不可见，无影响） |
@@ -209,4 +262,6 @@ https://xn--bqr649k.cn/img/trucks/202609/xxxxxxxx.png
 
 当前远端变量 `ADMIN_EMAILS` 为空，本地 `.dev.vars` 里填的是 `mfujun@agent.qq.com`。
 
-**填入前请确认这个邮箱能正常收信** —— 如果 Access 那步用同一个邮箱做登录身份，收不到验证码就进不去后台。建议换成你日常在用的邮箱。
+**Access 策略里用的邮箱是 `548827878@qq.com`**（你建策略时填的），填 `ADMIN_EMAILS` 时请填**同一个** —— 两边不一致会出现「Access 放行了但代码层拒绝」的矛盾状态。
+
+顺便：`.dev.vars` 里那个 `mfujun@agent.qq.com` 已无用，可改成 `548827878@qq.com` 保持一致。
