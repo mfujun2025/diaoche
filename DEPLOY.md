@@ -12,14 +12,14 @@
 | GitHub 账号 | 已具备（`mfujun2025`） |
 | Cloudflare 账号 | 免费注册即可，无需付费 |
 | 域名 | `吊车.cn`，**必须把 NS 改到 Cloudflare**（关键前提） |
-| Node.js | **≥ 18**（本机实测 22.22.2；GitHub Actions 用 20） |
+| Node.js | **≥ 22**（wrangler v4 硬性要求；GitHub Actions 里也用 22） |
 | npm | 随 Node 附带（本机 10.9.7） |
 | wrangler | **必须是 v4**（v3 不支持 `pages_build_output_dir`，会读不到配置） |
 
 ### 环境检查命令
 
 ```bash
-node -v            # 应 ≥ v18
+node -v            # 应 ≥ v22（v20 下 wrangler 会直接报错退出）
 npm -v
 npx wrangler --version   # 应是 4.x
 ```
@@ -337,6 +337,8 @@ curl -s -o /dev/null -w '%{http_code}\n' "$B/api/admin/list"
 | `/admin/` 一直跳登录但登录后仍 401 | `ADMIN_EMAILS` 没包含你的邮箱 | 改变量或清空该变量 |
 | 能从 `.pages.dev` 预览域名绕过登录 | 只配了生产域名的 Access | 补建应用 B（`.pages.dev`） |
 | **`wrangler pages dev` 报 "Unknown arguments" 或读不到 wrangler.toml** | **wrangler 是 v3，不支持 `pages_build_output_dir`** | **`npm install -D wrangler@^4`** |
+| **Actions 报 "Wrangler requires at least Node.js v22.0.0"** | **workflow 里 `setup-node` 设成了 20** | **改成 `node-version: '22'`**（这是实测踩到的，v4 硬性要求 Node ≥22） |
+| Actions 报 `npx canceled due to missing packages` | workflow 缺 `npm ci` | 在 Build 之前加 `- run: npm ci` |
 | `npm run preview` 里 POST 返回 502 | 服务被前台 shell 回收 | 用独立终端跑，别用 `&` 后台启动后立刻返回 |
 | 改了 `.dev.vars` 但变量没变 | wrangler 不热重载变量 | 重启 `wrangler pages dev` |
 | `npx wrangler pages deploy` 报 unknown `--dry-run` | 该参数不存在 | 用 `wrangler pages dev` 本地验证即可 |

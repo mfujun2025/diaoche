@@ -20,7 +20,8 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          # wrangler v4 要求 Node >= 22，用 20 会直接报错退出
+          node-version: '22'
 
       # 必须装依赖：wrangler-action 默认用 npx 找 wrangler，
       # 不装的话它会自行安装并可能落到 v3 —— 而 v3 读不到
