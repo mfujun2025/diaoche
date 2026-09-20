@@ -1,13 +1,12 @@
 # Cloudflare 配置清单与现状
 
-> **当前状态：站点已上线 ✅，图片上传 + 显示全链路已打通 ✅，后台 Access 防护已生效 ✅**
+> **当前状态：全部完成 ✅**
+> 站点已上线 · 图片上传 + 显示全链路已打通 · 后台 Access 防护已生效 · `ADMIN_EMAILS` 已填
 > 线上地址：<https://xn--bqr649k.cn/>（自定义域名已生效）· <https://diaoche-cn.pages.dev/>
 > 图片地址形如：`https://xn--bqr649k.cn/img/trucks/202609/xxxxxxxx.png`
 >
 > **图片方案已于 2026-09-20 变更**：不再依赖 R2 自定义域名（CF 对中文域名有 bug），
 > 改走本站 Functions 代理 → **你不需要再做 R2 自定义域那一步了**。
->
-> **剩余 1 项必须你手动做**：填 `ADMIN_EMAILS`（第二层防护）。
 
 ---
 
@@ -24,25 +23,42 @@
 | R2 绑定 | ✅ Pages 项目 production + preview 双环境 |
 | Pages 项目 | ✅ `diaoche-cn`，production branch = `main` |
 | **自定义域名** | ✅ **`xn--bqr649k.cn` 已绑定，状态 active** |
-| 环境变量 | ✅ `ENV` / `SITE_NAME`（`ADMIN_EMAILS` 仍为空） |
+| 环境变量 | ✅ `ENV` / `SITE_NAME` / **`ADMIN_EMAILS = 548827878@qq.com`** |
 | CI 流水线 | ✅ 全绿，静态页 + Functions 均已发布 |
 | 图片上传功能 | ✅ 前端选图 + 后端 `/api/upload` + 卡片显示封面 |
 | **Access 保护后台** | ✅ **已生效（2026-09-21 配好并验证）** |
+| **`ADMIN_EMAILS` 白名单** | ✅ **已填（与 Access 策略邮箱一致）** |
 
 ---
 
-## 二、待你操作（1 项）
+## 一·五、环境变量为什么在面板里改不了
 
-### ☐ 填 `ADMIN_EMAILS`（第二层防护）
+**现象**：Pages 项目 → Settings → Variables and secrets，三个变量（`ADMIN_EMAILS` / `ENV` / `SITE_NAME`）全是灰的只读，点 `+ Add` 加同名变量会报 `Another variable with this name already exists in this work`。
 
-Pages 项目 → Settings → **Variables and Secrets** → 编辑 `ADMIN_EMAILS`，填你的邮箱（多个用逗号分隔）。
+**根因**：面板里有提示 ——
 
-> 代码里还有一层邮箱白名单校验，即使 Access 被绕过也拦得住。**目前为空 = 这层没生效。**
-> 填**和 Access 策略里同一个邮箱**（`548827878@qq.com`）。
+> Environment variables for this project are being managed through **wrangler.toml**.
+> Only Secrets (encrypted variables) can be managed via the Dashboard.
+
+**本项目用 `wrangler.toml` 的 `[vars]` 托管环境变量，所以面板只读。**
+
+**改法**（唯一正确路径）：
+
+```toml
+# wrangler.toml
+[vars]
+ENV = "production"
+SITE_NAME = "吊车.cn"
+ADMIN_EMAILS = "548827878@qq.com"
+```
+
+改完 commit + push，CI 部署时自动带上。
+
+> 补充：本地 `.dev.vars` 是覆盖用的（已 gitignore），改完**必须重启 wrangler**，不热重载。
 
 ---
 
-## 二·五、Access 配置记录（已完成，供日后回溯）
+## 二、Access 配置记录（已完成，供日后回溯）
 
 **Zero Trust 组织**：Team name `mfujun`，Team domain `mfujun.cloudflareaccess.com`，Free 计划
 
@@ -254,14 +270,32 @@ https://xn--bqr649k.cn/img/trucks/202609/xxxxxxxx.png
 | **图片显示（代理方案）** | ✅ **代码完成 + 线上实测通过** |
 | **移动端适配** | ✅ **代码完成 + 线上实测通过（7 页零溢出）** |
 | **Access 保护后台** | ✅ **已生效 + 线上实测通过（4 路径 302）** |
-| `ADMIN_EMAILS` | ⬜ **待你填写**（见下方提醒） |
+| **`ADMIN_EMAILS` 白名单** | ✅ **已填（`548827878@qq.com`），CI 部署生效** |
 | 上传接口鉴权 | ⬜ 待你定策略（Access 或 Turnstile） |
 | 清理线上测试数据 | ⬜ 2 条 pending 测试车源（前台不可见，无影响） |
+| 删除临时 CF token | ⬜ `cfut_Urh2...`、`cfut_zRdge...`（都已用完） |
 
-### ⚠️ 关于 `ADMIN_EMAILS` 的提醒
+### 最终线上验证（2026-09-21）
 
-当前远端变量 `ADMIN_EMAILS` 为空，本地 `.dev.vars` 里填的是 `mfujun@agent.qq.com`。
+```
+后台（应 302）
+  xn--bqr649k.cn/admin/               302 ✅
+  xn--bqr649k.cn/api/admin/list       302 ✅
+  diaoche-cn.pages.dev/admin/         302 ✅
+  diaoche-cn.pages.dev/api/admin/list 302 ✅
+前台（应 200）
+  /  /trucks/  /sell/  /rent/  /price/  /guide/   全部 200 ✅
+图片接口（应 404）
+  /img/trucks/202609/nonexist.png     404 ✅
+```
 
-**Access 策略里用的邮箱是 `548827878@qq.com`**（你建策略时填的），填 `ADMIN_EMAILS` 时请填**同一个** —— 两边不一致会出现「Access 放行了但代码层拒绝」的矛盾状态。
+### 怎么进后台
 
-顺便：`.dev.vars` 里那个 `mfujun@agent.qq.com` 已无用，可改成 `548827878@qq.com` 保持一致。
+浏览器打开 **<https://xn--bqr649k.cn/admin/>**：
+
+1. 跳到 Cloudflare Access 登录页
+2. 填邮箱 `548827878@qq.com`
+3. 收 6 位验证码邮件 → 填入
+4. 进入后台，可审核车源
+
+> 用的是 **One-time PIN** 方式，不需要额外配 Google/GitHub 登录。

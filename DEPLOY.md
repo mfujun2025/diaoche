@@ -192,15 +192,29 @@ Pages 项目 → **Custom domains → Set up a domain**
 
 #### 双保险：白名单变量（可选但推荐）
 
-Access 已在网关拦截，但为防止有人直连 Functions 域绕过，代码里还有一层邮箱白名单：
+Access 已在网关拦截，但为防止有人直连 Functions 域绕过，代码里还有一层邮箱白名单。
 
-Cloudflare Pages → 项目 → **Settings → Variables and Secrets** 添加：
+**⚠️ 本项目不能用控制台改这个变量** —— 面板里三个变量全是灰色只读，全因为本项目环境变量由 `wrangler.toml` 托管。
+控制台会提示：
 
-| 变量 | 值 |
-|---|---|
-| `ADMIN_EMAILS` | 你的邮箱，多个用逗号分隔 |
+> Environment variables for this project are being managed through **wrangler.toml**.
+> Only Secrets (encrypted variables) can be managed via the Dashboard.
 
-> 留空则跳过白名单校验（仍受 Access 保护）。**建议填上。**
+**唯一改法**：编辑仓库里的 `wrangler.toml`：
+
+```toml
+[vars]
+ENV = "production"
+SITE_NAME = "吊车.cn"
+ADMIN_EMAILS = "你的邮箱@example.com"   # 多个用逗号分隔
+```
+
+改完 commit + push，CI 部署时自动生效。
+
+> 留空则跳过白名单校验（仍受 Access 保护）。
+> **填的话必须和 Zero Trust 应用策略里的邮箱一致**，否则会出现「Access 放行了但代码层返回 401」。
+>
+> 本地覆盖要写在 `.dev.vars`（已 gitignore），**改完必须重启 wrangler，不热重载**。
 
 #### 为什么前台不受影响
 
@@ -406,9 +420,11 @@ curl -s -o /dev/null -w '%{http_code}\n' "$B/api/admin/list"
 | Actions 报 wrangler 权限不足 | Token 权限缺失 | 补 `Pages:Edit` + `D1:Edit` |
 | 车源列表一直"加载中" | `/api/trucks` 404 | 确认 `functions/api/` 目录被识别，本地用 `npm run preview` |
 | 提交后前台看不到 | 状态是 `pending` | 去 `/admin/` 审核通过 |
-| 打开 `/admin/` 直接可见，没要登录 | Access 没配或路径写错 | 检查两个应用的 Path 是否为 `admin` 与 `api/admin` |
-| `/admin/` 一直跳登录但登录后仍 401 | `ADMIN_EMAILS` 没包含你的邮箱 | 改变量或清空该变量 |
-| 能从 `.pages.dev` 预览域名绕过登录 | 只配了生产域名的 Access | 补建应用 B（`.pages.dev`） |
+| 打开 `/admin/` 直接可见，没要登录 | Access 没配或路径写错 | **先看状态码：应该是 302；返回 200 就是没拦住。** 检查两个域名的 Path 是 `admin` 与 `api/admin` |
+| **Access 配置界面看着全对，但就是不拦（返回 200）** | **Destinations 被填成了 `域名/admin + api/admin` 一整串**（表单把域名和路径合并输入时极易发生） | **用 API 读 `/accounts/{id}/access/apps` 看 `self_hosted_domains`，每项必须是独立的「域名/路径」。** 用 `PUT` 重写（带上 `name` + `type: self_hosted`，否则报 `12130`） |
+| `/admin/` 一直跳登录但登录后仍 401 | `ADMIN_EMAILS` 与 Access 策略邮箱不一致 | 改 `wrangler.toml`（控制台里这个变量是只读的） |
+| 控制台 Variables 全是灰的、改不了也加不了 | 环境变量由 `wrangler.toml` 托管 | 改 `wrangler.toml` 的 `[vars]`，推上去由 CI 生效 |
+| 能从 `.pages.dev` 预览域名绕过登录 | Access 只保护了生产域名 | 确认应用 Destinations 里包含 `diaoche-cn.pages.dev/admin` 与 `/api/admin` |
 | **`wrangler pages dev` 报 "Unknown arguments" 或读不到 wrangler.toml** | **wrangler 是 v3，不支持 `pages_build_output_dir`** | **`npm install -D wrangler@^4`** |
 | **Actions 报 "Wrangler requires at least Node.js v22.0.0"** | **workflow 里 `setup-node` 设成了 20** | **改成 `node-version: '22'`**（这是实测踩到的，v4 硬性要求 Node ≥22） |
 | Actions 报 `npx canceled due to missing packages` | workflow 缺 `npm ci` | 在 Build 之前加 `- run: npm ci` |
