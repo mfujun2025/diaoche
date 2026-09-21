@@ -1,9 +1,10 @@
 // 静态站构建脚本：生成 dist/ 下的全部页面
-import { mkdir, writeFile, rm, cp } from 'node:fs/promises';
+import { mkdir, writeFile, rm, cp, readdir, readFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { pages, SITE, DISCLAIMER_SHORT } from '../src/site.mjs';
+import { pages, SITE, DISCLAIMER_SHORT, ORG_NODE, ARTICLES_PLACEHOLDER } from '../src/site.mjs';
+import { parseFrontmatter, renderMarkdown, plainText } from './lib/md.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
@@ -202,11 +203,17 @@ const FAVICON = `<link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="icon" href="/favicon.ico" sizes="any">
 <link rel="apple-touch-icon" href="/og.png">`;
 
+/* 文章：扫 src/articles/*.md，每篇生成 /guide/<slug>/。
+   ⚠️ 必须在这里 await，不能挪到后面懒加载 —— 下面的 sitemap 与主循环都要用，
+   声明晚了会踩 TDZ（本项目已在 FAVICON 上踩过一次同类问题）。 */
+const articles = await loadArticles();
+const allPages = [...pages, ...articles.map(articlePage)];
+
 let count = 0;
-for (const page of pages) {
+for (const page of allPages) {
   const outPath = path.join(DIST, page.path);
   await mkdir(path.dirname(outPath), { recursive: true });
-  await writeFile(outPath, page.layout === 'admin' ? renderAdmin(page, css) : render(page, css), 'utf8');
+  await writeFile(outPath, page.layout === 'admin' ? renderAdmin(page, css) : render(page, css, articles), 'utf8');
   count++;
 }
 
@@ -259,23 +266,9 @@ Sitemap: ${SITE.url}/sitemap.xml
 function renderSitemap() {
   const today = new Date().toISOString().slice(0, 10);
 
-  // 只收录前台可索引页；admin 是 noindex，不列
-  const staticPages = pages.filter((p) => p.layout !== 'admin');
-
-  const urls = staticPages.map((p) => {
-    const loc = p.path === 'index.html' ? `${SITE.url}/` : `${SITE.url}/${p.path.replace(/index\.html$/, '')}`;
-    // 首页权重最高，车源大厅次之
-    const priority = p.path === 'index.html' ? '1.0' : p.path === 'trucks/index.html' ? '0.9' : '0.7';
-    const changefreq = p.path === 'index.html' || p.path === 'trucks/index.html' ? 'daily' : 'weekly';
-    return `  <url>
-    <loc>${xmlEsc(loc)}</loc>
-    <lastmod>${today}</lastmod>
-    <changefreq>${changefreq}</changefreq>
-    <priority>${priority}</priority>
-  </url>`;
-  });
-
-  // 车源详情页由动态 sitemap 提供，这里用 sitemapindex 挂上去
+  // 车源详情页在构建阶段查不到（CI 里没有 D1 凭据），用 sitemapindex
+  // 挂上 /trucks-sitemap.xml（由 Functions 实时查库生成）。
+  // 静态页清单统一由 pages-sitemap.xml 提供，这里不再重复列一遍。
   return `<?xml version="1.0" encoding="UTF-8"?>
 <sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <sitemap>
@@ -290,24 +283,33 @@ function renderSitemap() {
 `;
 }
 
-/** 静态页部分的 sitemap，内容与 /sitemap.xml 的静态部分一致 */
-function renderPagesSitemap() {
+/** 静态页 + 文章页的 URL 条目。两个 sitemap 函数共用，避免各写一份走偏。
+ *  页面对象可用 priority / changefreq 覆盖默认值（文章页用 0.6 / monthly）。 */
+function sitemapUrlEntries(list) {
   const today = new Date().toISOString().slice(0, 10);
-  const staticPages = pages.filter((p) => p.layout !== 'admin');
-  const urls = staticPages.map((p) => {
-    const loc = p.path === 'index.html' ? `${SITE.url}/` : `${SITE.url}/${p.path.replace(/index\.html$/, '')}`;
-    const priority = p.path === 'index.html' ? '1.0' : p.path === 'trucks/index.html' ? '0.9' : '0.7';
-    const changefreq = p.path === 'index.html' || p.path === 'trucks/index.html' ? 'daily' : 'weekly';
-    return `  <url>
-    <loc>${xmlEsc(loc)}</loc>
+  return list
+    .map((p) => {
+      const priority =
+        p.priority ?? (p.path === 'index.html' ? '1.0' : p.path === 'trucks/index.html' ? '0.9' : '0.7');
+      const changefreq =
+        p.changefreq ?? (p.path === 'index.html' || p.path === 'trucks/index.html' ? 'daily' : 'weekly');
+      return `  <url>
+    <loc>${xmlEsc(pageUrl(p.path))}</loc>
     <lastmod>${today}</lastmod>
     <changefreq>${changefreq}</changefreq>
     <priority>${priority}</priority>
   </url>`;
-  });
+    })
+    .join('\n');
+}
+
+/** 静态页 + 文章页的 sitemap */
+function renderPagesSitemap() {
+  // admin 是 noindex，不列
+  const list = allPages.filter((p) => p.layout !== 'admin');
   return `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-${urls.join('\n')}
+${sitemapUrlEntries(list)}
 </urlset>
 `;
 }
@@ -365,8 +367,10 @@ function socialMeta(page) {
 <meta name="twitter:image" content="${esc(SITE.ogImage)}">`;
 }
 
-function render(page, css) {
-  const { title, description, body, path: p, ld } = page;
+function render(page, css, articles = []) {
+  const { title, description, path: p, ld } = page;
+  // 文章列表占位符替换。其他页面 body 里没有占位符，replace 是空操作。
+  const body = String(page.body ?? '').replace(ARTICLES_PLACEHOLDER, renderArticleList(articles));
   const full = pageUrl(p);
   // 只有声明了 ld 的页面才输出结构化数据（admin 是无）
   const ldScript =
@@ -435,4 +439,154 @@ ${FAVICON}
 <script src="/admin.js" defer></script>
 </body>
 </html>`;
+}
+
+/* ───────── 文章 ─────────
+   内容放 src/articles/*.md，构建时渲染成 /guide/<slug>/。
+   markdown 渲染器在 scripts/lib/md.mjs（零依赖，单测 scripts/test-md.mjs）。
+
+   下面的函数都是 function 声明 —— 会被 hoist，所以能在顶层调用点之前定义。
+   ⚠️ 但不要在函数外新增 const 再在函数里用：const 不 hoist，
+   调用点在前会直接踩 TDZ（本项目已经踩过一次）。 */
+
+/** 读全部文章。目录不存在时返回空数组 —— 文章是可选的，不该阻断构建。 */
+async function loadArticles() {
+  const dir = path.join(ROOT, 'src', 'articles');
+
+  let files = [];
+  try {
+    files = (await readdir(dir)).filter((f) => f.endsWith('.md'));
+  } catch {
+    return [];
+  }
+
+  const list = [];
+  for (const file of files) {
+    const { meta, body } = parseFrontmatter(await readFile(path.join(dir, file), 'utf8'));
+    const slug = String(meta.slug || file.replace(/\.md$/, '')).trim();
+    const text = plainText(body);
+
+    // 静默生成一个坏页面比构建失败更糟，这里直接抛
+    if (!slug) throw new Error(`[build] 文章 ${file} 缺少 slug`);
+    if (!text) throw new Error(`[build] 文章 ${file} 正文为空`);
+
+    list.push({
+      slug,
+      title: meta.title || text.slice(0, 30),
+      description: meta.description || text.slice(0, 80),
+      date: meta.date || '',
+      html: renderMarkdown(body),
+      words: text.replace(/\s/g, '').length,
+      file,
+    });
+  }
+
+  // 新的在前。date 相同时按 slug 兜底排序 —— 保证每次构建产物顺序一致，
+  // 否则 CI 里同一份内容会产出不同 diff。
+  list.sort((a, b) => String(b.date).localeCompare(String(a.date)) || a.slug.localeCompare(b.slug));
+
+  // slug 重复会让两篇文章互相覆盖，拦下来
+  const seen = new Set();
+  for (const a of list) {
+    if (seen.has(a.slug)) throw new Error(`[build] slug 重复：${a.slug}`);
+    seen.add(a.slug);
+  }
+  return list;
+}
+
+/** 文章页对象，交给 render() 渲染 */
+function articlePage(a) {
+  return {
+    path: `guide/${a.slug}/index.html`,
+    title: a.title,
+    description: a.description,
+    ogDesc: a.description,
+    ld: () => articleLd(a),
+    body: articleBody(a),
+    // 文章更新频率低于频道页，权重给低一档
+    priority: '0.6',
+    changefreq: 'monthly',
+  };
+}
+
+/** title 里带了「| 吊车.cn」后缀，H1 与结构化数据不该带 */
+function stripBrand(title) {
+  return String(title || '').replace(/\s*\|\s*吊车\.cn\s*$/, '');
+}
+
+function articleUrl(a) {
+  return `${SITE.url}/guide/${a.slug}/`;
+}
+
+function articleBody(a) {
+  const h1 = stripBrand(a.title);
+  const meta = [a.date, `约 ${a.words} 字`].filter(Boolean).join(' · ');
+  return `<section class="wrap sec first narrow">
+  <p class="crumb"><a href="/">首页</a><span>›</span><a href="/guide/">避坑指南</a></p>
+  <h1 class="h1">${esc(h1)}</h1>
+  <p class="tip">${esc(meta)}</p>
+  <article class="article">${a.html}</article>
+</section>
+${relatedBlock(a)}`;
+}
+
+/** 文章底部互链。既是给读者的下一步，也是站内权重流动的通道。 */
+function relatedBlock(current) {
+  const others = articles.filter((x) => x.slug !== current.slug).slice(0, 3);
+  if (!others.length) return '';
+  return `<section class="wrap sec">
+  <h2 class="h2">继续看</h2>
+  <div class="posts">
+${others.map(postItemHtml).join('\n')}
+  </div>
+</section>`;
+}
+
+/** 指南页顶部的文章列表 */
+function renderArticleList(list) {
+  if (!list.length) return '';
+  return `<div class="posts">
+${list.map(postItemHtml).join('\n')}
+</div>`;
+}
+
+function postItemHtml(a) {
+  return `    <a class="post-item" href="/guide/${encodeURIComponent(a.slug)}/">
+      <h3>${esc(stripBrand(a.title))}</h3>
+      <p>${esc(a.description)}</p>
+      <div class="post-meta"><span>${esc(a.date)}</span><span>约 ${a.words} 字</span></div>
+    </a>`;
+}
+
+/** 文章结构化数据：Article + BreadcrumbList。
+ *  author / publisher 用 @id 引用 ORG_NODE，避免同一实体在 @graph 里展开两遍。 */
+function articleLd(a) {
+  const url = articleUrl(a);
+  const h1 = stripBrand(a.title);
+  const orgRef = { '@id': `${SITE.url}/#organization` };
+  return {
+    '@context': 'https://schema.org',
+    '@graph': [
+      {
+        '@type': 'Article',
+        headline: h1,
+        description: a.description,
+        url,
+        mainEntityOfPage: { '@type': 'WebPage', '@id': url },
+        inLanguage: 'zh-CN',
+        ...(a.date ? { datePublished: a.date, dateModified: a.date } : {}),
+        author: orgRef,
+        publisher: orgRef,
+      },
+      {
+        '@type': 'BreadcrumbList',
+        itemListElement: [
+          { '@type': 'ListItem', position: 1, name: '首页', item: `${SITE.url}/` },
+          { '@type': 'ListItem', position: 2, name: '避坑指南', item: `${SITE.url}/guide/` },
+          { '@type': 'ListItem', position: 3, name: h1 },
+        ],
+      },
+      ORG_NODE,
+    ],
+  };
 }

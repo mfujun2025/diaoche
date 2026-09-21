@@ -142,6 +142,39 @@ try {
   bad(`门禁检查失败：${e.message}`);
 }
 
+/* ─── 5. 指南文章页可访问 ────────────────────────────────────────
+   ⚠️ 判据不能只看状态码：Pages 的 SPA 式回落在「文件不存在」时
+   同样返回 200 + 首页 HTML。必须核对页面里有没有这篇文章**独有**的文字，
+   否则「文章没部署上去」会被误判成正常。 */
+console.log('\n[5] 指南文章页');
+try {
+  const hub = await getJson('/guide/');
+  if (hub.status === 200 && hub.text.includes('深入阅读') && hub.text.includes('25 吨价格参考')) {
+    ok('/guide/ 列表页正常（含文章列表）');
+  } else {
+    bad(`/guide/ 列表页异常：${hub.status} —— 可能被回落成首页 HTML`);
+  }
+
+  const post = await getJson('/guide/25t-price/');
+  const ownTitle = post.text.includes('二手吊车 25 吨价格参考');
+  const ownBody = post.text.includes('决定差价的四个因素') || post.text.includes('车龄是第一位的');
+  if (post.status === 200 && ownTitle && ownBody) {
+    ok('文章页 /guide/25t-price/ 正常（标题与正文都属于这篇文章）');
+  } else {
+    bad(`★ 文章页异常：状态 ${post.status}，标题${ownTitle ? '在' : '缺'}、正文${ownBody ? '在' : '缺'}`);
+    console.log('      多半是静态文件没传上去，或 SPA 回落吃掉了 /guide/<slug>/ 路径');
+  }
+
+  const sm = await getJson('/pages-sitemap.xml');
+  if (sm.text.includes('/guide/25t-price/')) {
+    ok('pages-sitemap.xml 已收录文章页');
+  } else {
+    bad('pages-sitemap.xml 里没有文章页 —— 搜索引擎发现不了');
+  }
+} catch (e) {
+  bad(`文章页检查失败：${e.message}`);
+}
+
 /* ─── 结果 ─────────────────────────────────────────────────────── */
 console.log(`\n[check-env] 通过 ${pass} 项`);
 if (fails.length) {

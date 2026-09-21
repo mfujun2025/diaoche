@@ -118,9 +118,35 @@ p{margin:0 0 1em}
 
 /* article */
 .art{border-top:1px solid var(--line);padding:22px 0}
-.art h2{font-size:17px}
+.art h2,.art h3{font-size:17px;margin:0 0 .5em}
 .art p{margin:0;color:var(--fg2)}
 .notice{margin:24px 0;padding:16px 18px;background:var(--bg2);border-left:3px solid var(--brand);border-radius:0 var(--radius) var(--radius) 0;font-size:14px;color:var(--fg2)}
+
+/* 文章列表（指南页顶部与文章页底部互链共用同一套）
+   注意别给 .posts 加 margin-top —— 列表上方都紧挨着一个 h2，
+   那个 h2 自带 22px 下边距，再加就会撑出过大的空档。 */
+.posts{display:grid;gap:12px}
+.post-item{display:block;padding:18px 20px;border:1px solid var(--line);border-radius:var(--radius);
+  background:#fff;transition:.15s}
+.post-item:hover{border-color:var(--brand);box-shadow:var(--shadow)}
+.post-item h3{font-size:17px;margin:0 0 6px}
+.post-item p{margin:0;font-size:13.5px;color:var(--fg2)}
+.post-meta{display:flex;gap:12px;flex-wrap:wrap;margin-top:10px;font-size:12.5px;color:var(--fg2)}
+
+/* 文章正文排版。markdown 渲染出来的标签就这几个，样式集中放这里。 */
+.article{font-size:15.5px;line-height:1.85}
+.article h2{font-size:20px;margin:34px 0 12px}
+.article h3{font-size:16.5px;margin:24px 0 10px}
+.article p{margin:0 0 1.1em}
+.article ul,.article ol{margin:0 0 1.1em;padding-left:22px}
+.article li{margin-bottom:6px}
+.article li::marker{color:var(--brand)}
+.article blockquote{margin:24px 0;padding:14px 18px;background:var(--bg2);
+  border-left:3px solid var(--brand);border-radius:0 var(--radius) var(--radius) 0;
+  color:var(--fg2);font-size:14px}
+.article blockquote p:last-child{margin:0}
+.article a{color:var(--brand);text-decoration:underline;text-underline-offset:2px}
+.article hr{border:0;border-top:1px solid var(--line);margin:30px 0}
 
 /* 面包屑（长尾筛选页 / 详情页共用） */
 .crumb{font-size:13.5px;color:var(--fg2);margin:0 0 14px}
@@ -250,6 +276,14 @@ p{margin:0 0 1em}
   /* 图片预览缩略图放大一点，方便点删除 */
   .img-preview .thumb{width:84px;height:84px}
   .img-preview .thumb-x{width:24px;height:24px;font-size:15px;top:2px;right:2px}
+
+  /* 文章列表与正文 */
+  .post-item{padding:15px 16px}
+  .post-item h3{font-size:15.5px}
+  .post-item p{font-size:13px}
+  .article{font-size:15px;line-height:1.8}
+  .article h2{font-size:18px;margin:28px 0 10px}
+  .article h3{font-size:15.5px;margin:22px 0 8px}
 }
 
 @media(max-width:520px){

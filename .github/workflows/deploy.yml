@@ -35,13 +35,14 @@ jobs:
       - name: Build static site
         run: node scripts/build.mjs
 
-      # 跑测试：head 结构化数据 + 登录核心逻辑 + 登录 SQL 集成
+      # 跑测试：head 结构化数据 + 登录核心逻辑 + 登录 SQL 集成 + markdown 渲染器
       # 这些测试全是纯逻辑 / 内存库，不需要网络和凭据，CI 里跑得飞快
       - name: Run tests
         run: |
           node scripts/test-head.mjs
           node scripts/test-auth.mjs
           node --no-warnings scripts/test-auth-db.mjs
+          node --no-warnings scripts/test-md.mjs
 
       # ★ 幂等建表：schema.sql 里全是 CREATE TABLE IF NOT EXISTS，
       #   反复执行安全。放在部署前，避免「代码上线了但库里没表 → 接口 500」。

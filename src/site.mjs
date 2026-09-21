@@ -10,6 +10,12 @@ export const SITE = {
   ogImageHeight: 630,
 };
 
+/* 文章列表占位符。
+   build.mjs 扫 src/articles/*.md 后把生成的列表 HTML 替换到这里。
+   为什么要占位符而不是直接把文章拼进 body：文章是数据（会增删），
+   页面骨架是结构（基本不变），两者分开维护才不会每次加文章都改站点源码。 */
+export const ARTICLES_PLACEHOLDER = '<!--ARTICLES-->';
+
 /* 免责声明：全站统一文案，避免多处各写一份导致口径不一致。
    - footer 用 DISCLAIMER_SHORT
    - 车源详情页用 DISCLAIMER_FULL（逐条页面都要有，纠纷多发生在这里） */
@@ -215,11 +221,20 @@ const priceBody = `
 </section>
 `;
 
-/* ---------- 避坑指南 ---------- */
+/* ---------- 避坑指南（文章列表 + 常见问题） ---------- */
 const guideBody = `
-<section class="wrap sec first narrow">
+<section class="wrap sec first">
   <h1 class="h1">二手吊车避坑指南</h1>
-  ${GUIDE_ITEMS.map((x) => `<article class="art"><h2>${x[0]}</h2><p>${x[1]}</p></article>`).join('')}
+  <p class="lead">从选车、验车到过户的交易要点。下面几篇针对具体问题展开，比速查问答更细。</p>
+  <h2 class="h2">深入阅读</h2>
+  ${ARTICLES_PLACEHOLDER}
+</section>
+
+<section class="wrap sec">
+  <h2 class="h2">常见问题速查</h2>
+  <div class="narrow">
+    ${GUIDE_ITEMS.map((x) => `<article class="art"><h3>${x[0]}</h3><p>${x[1]}</p></article>`).join('')}
+  </div>
 </section>
 `;
 
@@ -263,8 +278,9 @@ const adminBody = `
    设计取舍：用 @graph 把多个实体放进一个 script 标签，而不是拆成多个 ——
    减少 head 体积、也方便搜索引擎整体理解站点的实体关系。 */
 
-/** 站点主体。Organization 是「谁在运营这个站」，全站只声明一次。 */
-const ORG_NODE = {
+/** 站点主体。Organization 是「谁在运营这个站」，全站只声明一次。
+ *  build.mjs 生成文章页时也要用它当 publisher，所以导出。 */
+export const ORG_NODE = {
   '@type': 'Organization',
   '@id': `${SITE.url}/#organization`,
   name: SITE.name,
