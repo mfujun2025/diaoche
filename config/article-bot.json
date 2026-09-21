@@ -1,0 +1,160 @@
+{
+  "_说明": "吊车.cn 每日文章机器人的全部配置。敏感信息一律不写在这里，用 env:xxx 引用环境变量。复制本文件为 article-bot.json 后按需修改。",
+
+  "schedule": {
+    "cron": "0 1 * * *",
+    "_cron说明": "GitHub Actions 用 UTC。0 1 * * * = 北京时间 09:00。改这里的同时要改 .github/workflows/daily-article.yml 里的 cron（两者需一致）",
+    "timezone": "Asia/Shanghai",
+    "enabled": true
+  },
+
+  "article": {
+    "minWords": 1000,
+    "maxWords": 1500,
+    "descriptionWords": [50, 80],
+    "h2Range": [3, 5],
+    "internalLinks": [3, 4],
+    "brandSuffix": "| 吊车.cn",
+    "coreWord": "吊车",
+    "keywordDensity": { "min": 0.8, "max": 2.8 },
+    "titleMaxChars": 30
+  },
+
+  "llm": {
+    "provider": "openai-compatible",
+    "baseUrlEnv": "LLM_BASE_URL",
+    "baseUrlDefault": "https://api.deepseek.com/v1",
+    "apiKeyEnv": "LLM_API_KEY",
+    "modelEnv": "LLM_MODEL",
+    "modelDefault": "deepseek-chat",
+    "temperature": 0.7,
+    "maxTokens": 4096,
+    "timeoutMs": 180000
+  },
+
+  "publish": {
+    "target": "git",
+    "git": {
+      "repoEnv": "GITHUB_REPOSITORY",
+      "repoDefault": "mfujun2025/diaoche",
+      "branchEnv": "ARTICLE_BOT_BRANCH",
+      "branchDefault": "main",
+      "dir": "src/articles",
+      "tokenEnv": "ARTICLE_BOT_GH_TOKEN",
+      "_token说明": "GitHub Actions 里可用内置的 secrets.GITHUB_TOKEN；本机跑要填自己的 PAT（repo 权限）",
+      "commitMessagePrefix": "每日文章"
+    },
+    "http": {
+      "urlEnv": "ARTICLE_API_URL",
+      "urlDefault": "",
+      "tokenEnv": "ARTICLE_API_TOKEN",
+      "method": "POST",
+      "timeoutMs": 30000
+    },
+    "dir": {
+      "path": "out/articles"
+    }
+  },
+
+  "retry": {
+    "attempts": 3,
+    "backoffMs": [3000, 10000, 25000]
+  },
+
+  "dedupe": {
+    "maxTitleSimilarity": 0.55,
+    "maxKeywordSimilarity": 0.8,
+    "_说明": "相似度用 2-gram Jaccard。超过阈值视为重复主题，跳过并选下一个"
+  },
+
+  "alert": {
+    "webhookEnv": "ARTICLE_BOT_WEBHOOK",
+    "_webhook说明": "留空则只写日志。支持飞书机器人、企业微信机器人（群里添加机器人后拿到的 webhook 地址）",
+    "onFailureOnly": true,
+    "timeoutMs": 15000
+  },
+
+  "logging": {
+    "dir": "logs",
+    "file": "article-bot.jsonl",
+    "maxEntries": 500
+  },
+
+  "bannedPhrases": [
+    "综上所述",
+    "总的来说",
+    "在当今社会",
+    "随着科技的不断发展",
+    "希望本文对您有所帮助",
+    "以上就是",
+    "总而言之"
+  ],
+
+  "topics": [
+    { "id": "select-25-vs-35", "category": "选型", "keyword": "25吨和35吨二手吊车怎么选", "title": "25 吨还是 35 吨？二手汽车吊选型的关键取舍", "links": ["/trucks/25吨/", "/trucks/35吨/", "/price/"] },
+    { "id": "select-8t-scenario", "category": "选型", "keyword": "8吨二手吊车适合什么活", "title": "8 吨二手吊车都能干什么活？先看清它的能力边界", "links": ["/trucks/8吨/", "/rent/", "/price/"] },
+    { "id": "select-12t-entry", "category": "选型", "keyword": "12吨二手吊车值不值得买", "title": "12 吨二手吊车：个体户入场最合适的一档吗", "links": ["/trucks/12吨/", "/price/", "/guide/"] },
+    { "id": "select-16t-city", "category": "选型", "keyword": "16吨二手吊车城市工况", "title": "16 吨二手吊车为什么最适合城市零散活", "links": ["/trucks/16吨/", "/rent/", "/price/"] },
+    { "id": "select-50t-heavy", "category": "选型", "keyword": "50吨二手吊车进场要求", "title": "50 吨二手吊车不是买得起就干得了：进场门槛清单", "links": ["/trucks/50吨/", "/guide/", "/price/"] },
+    { "id": "select-80t-100t", "category": "选型", "keyword": "80吨以上二手吊车谁在买", "title": "80 吨以上二手吊车：什么业务量才撑得住这台车", "links": ["/trucks/80吨/", "/trucks/100吨/", "/price/"] },
+    { "id": "select-boom-length", "category": "选型", "keyword": "二手吊车臂长怎么选", "title": "买二手吊车先看臂长：主臂、副臂与工况的对应关系", "links": ["/trucks/", "/guide/", "/price/"] },
+    { "id": "select-chassis-drive", "category": "选型", "keyword": "二手吊车底盘驱动形式", "title": "6×4 还是 8×4？二手吊车驱动形式的实用差别", "links": ["/trucks/", "/guide/"] },
+    { "id": "select-truck-crane-vs-crawler", "category": "选型", "keyword": "汽车吊和履带吊怎么选", "title": "汽车吊还是履带吊？二手设备选型的三条判断线", "links": ["/trucks/", "/rent/"] },
+    { "id": "select-loader-crane", "category": "选型", "keyword": "随车吊和汽车吊区别", "title": "随车吊不是小号汽车吊：两者该怎么选", "links": ["/trucks/", "/guide/"] },
+
+    { "id": "safety-outrigger", "category": "安全", "keyword": "吊车支腿操作规范", "title": "吊车支腿怎么打才安全？垫板、间距与地基要求", "links": ["/guide/", "/rent/"] },
+    { "id": "safety-power-line", "category": "安全", "keyword": "吊车高压线安全距离", "title": "高压线下作业的吊车安全距离，到底按多少米算", "links": ["/guide/", "/rent/"] },
+    { "id": "safety-wind", "category": "安全", "keyword": "吊车几级风停止作业", "title": "几级风必须停吊？大风工况的判断与执行边界", "links": ["/guide/", "/rent/"] },
+    { "id": "safety-load-moment", "category": "安全", "keyword": "吊车力矩限制器使用", "title": "力矩限制器报警了还吊吗？这台保命装置的正确用法", "links": ["/guide/", "/trucks/"] },
+    { "id": "safety-rigger-signal", "category": "安全", "keyword": "吊装指挥信号标准", "title": "司索工与指挥信号：二手设备最容易缺的那套配置", "links": ["/guide/", "/rent/"] },
+    { "id": "safety-sling-scrap", "category": "安全", "keyword": "吊索具报废标准", "title": "钢丝绳、吊带什么时候必须报废？一份能照着查的清单", "links": ["/guide/"] },
+    { "id": "safety-lift-plan", "category": "安全", "keyword": "吊装方案怎么编", "title": "没有吊装方案就开工？重件作业前必须走完的流程", "links": ["/guide/", "/rent/"] },
+    { "id": "safety-night-work", "category": "安全", "keyword": "夜间吊装注意事项", "title": "夜间吊装多出来的风险点，以及最低限度该怎么补", "links": ["/guide/", "/rent/"] },
+    { "id": "safety-person-lift", "category": "安全", "keyword": "吊车能否载人作业", "title": "能用吊车吊人吗？这条红线为什么踩不得", "links": ["/guide/", "/rent/"] },
+    { "id": "safety-tipping-cause", "category": "安全", "keyword": "吊车倾翻常见原因", "title": "二手吊车倾翻事故的几种典型成因复盘", "links": ["/guide/", "/trucks/"] },
+
+    { "id": "maint-rope-cycle", "category": "维保", "keyword": "吊车钢丝绳更换周期", "title": "吊车钢丝绳多久换一次？看的是标准不是日历", "links": ["/guide/", "/trucks/"] },
+    { "id": "maint-hydraulic-oil", "category": "维保", "keyword": "吊车液压油多久更换", "title": "液压油什么时候该换？取样、油温与颜色的三个信号", "links": ["/guide/"] },
+    { "id": "maint-slewing-bearing", "category": "维保", "keyword": "回转支承保养", "title": "回转支承异响先别急着换：润滑与螺栓力矩检查", "links": ["/guide/", "/trucks/"] },
+    { "id": "maint-outrigger-cylinder", "category": "维保", "keyword": "支腿油缸漏油处理", "title": "支腿油缸渗油还能干活吗？判断轻重程度的办法", "links": ["/guide/"] },
+    { "id": "maint-winter-start", "category": "维保", "keyword": "冬季吊车启动保养", "title": "冬天冷启动：二手吊车入冬前必做的几件事", "links": ["/guide/", "/trucks/"] },
+    { "id": "maint-boam-slider", "category": "维保", "keyword": "吊臂滑块调整", "title": "吊臂伸缩发抖？多半是滑块间隙和润滑出了问题", "links": ["/guide/"] },
+    { "id": "maint-brake-system", "category": "维保", "keyword": "吊车刹车系统保养", "title": "刹车是二手吊车最容易被忽略的检查项", "links": ["/guide/", "/trucks/"] },
+    { "id": "maint-parts-stock", "category": "维保", "keyword": "二手吊车常用配件备货", "title": "手边该备哪些配件？按停机损失算而不是按价格算", "links": ["/guide/", "/trucks/徐工/"] },
+    { "id": "maint-annual-inspect", "category": "维保", "keyword": "吊车年检要查什么", "title": "年检都查什么？提前自查能省下的时间与钱", "links": ["/guide/", "/sell/"] },
+    { "id": "maint-idle-storage", "category": "维保", "keyword": "吊车长期停放保养", "title": "活少要停两个月：二手吊车停放期的保养要点", "links": ["/guide/", "/rent/"] },
+
+    { "id": "fault-moment-alarm", "category": "故障", "keyword": "力矩限制器报警排查", "title": "力矩限制器频繁报警：三种真故障与两种假报警", "links": ["/guide/", "/trucks/"] },
+    { "id": "fault-slewing-noise", "category": "故障", "keyword": "回转机构异响原因", "title": "回转有异响，先听位置再谈维修", "links": ["/guide/"] },
+    { "id": "fault-outrigger-sink", "category": "故障", "keyword": "支腿下沉原因", "title": "支腿慢慢往下沉：到底是内漏还是单向阀坏了", "links": ["/guide/", "/trucks/"] },
+    { "id": "fault-hoist-weak", "category": "故障", "keyword": "卷扬无力怎么修", "title": "卷扬起吊无力：从压力测试到马达判断的顺序", "links": ["/guide/"] },
+    { "id": "fault-oil-temp-high", "category": "故障", "keyword": "液压油高温处理", "title": "液压油一高温就掉速：散热与内泄的两条排查路径", "links": ["/guide/", "/rent/"] },
+    { "id": "fault-boom-stuck", "category": "故障", "keyword": "吊臂伸不出来", "title": "吊臂伸缩卡住：先别硬动作，按顺序查这四处", "links": ["/guide/"] },
+    { "id": "fault-engine-power", "category": "故障", "keyword": "吊车动力不足原因", "title": "上车没劲还是底盘没劲？动力不足的分段判断", "links": ["/guide/", "/trucks/"] },
+    { "id": "fault-electric-fault", "category": "故障", "keyword": "吊车电路常见故障", "title": "二手吊车电路毛病多：接插件与搭铁线要最先查", "links": ["/guide/"] },
+    { "id": "fault-pump-noise", "category": "故障", "keyword": "液压泵异响怎么处理", "title": "液压泵一叫就是大钱？先排除气蚀和吸空", "links": ["/guide/"] },
+    { "id": "fault-remote-control", "category": "故障", "keyword": "吊车遥控器失灵", "title": "遥控器时灵时不灵：干扰、电量与配对的三角排查", "links": ["/guide/", "/rent/"] },
+
+    { "id": "case-wind-power", "category": "案例", "keyword": "风电吊装用什么吊车", "title": "风机吊装用什么车？履带为主，但也有汽车吊的活", "links": ["/rent/", "/trucks/100吨/"] },
+    { "id": "case-bridge-erect", "category": "案例", "keyword": "桥梁架设吊车选型", "title": "架桥选型：吨位不是唯一指标，站位才是", "links": ["/rent/", "/trucks/50吨/"] },
+    { "id": "case-steel-plant", "category": "案例", "keyword": "厂房钢结构吊装", "title": "厂房钢构吊装的一天：从站位图到收车的全过程", "links": ["/rent/", "/trucks/25吨/"] },
+    { "id": "case-municipal-rescue", "category": "案例", "keyword": "市政抢险吊车作业", "title": "市政抢险里的吊车：赶到快、站稳、收得快", "links": ["/rent/", "/trucks/16吨/"] },
+    { "id": "case-port-handling", "category": "案例", "keyword": "港口装卸吊车应用", "title": "港口零散件装卸：什么配置才算不亏", "links": ["/rent/", "/trucks/"] },
+    { "id": "case-pv-install", "category": "案例", "keyword": "光伏安装吊装方案", "title": "山地光伏施工用什么吊车？爬坡能力排第一", "links": ["/rent/", "/trucks/"] },
+    { "id": "case-machine-move", "category": "案例", "keyword": "设备搬迁吊装案例", "title": "机床搬迁这类重活，报价差别到底在哪", "links": ["/rent/", "/trucks/35吨/"] },
+    { "id": "case-tree-move", "category": "案例", "keyword": "园林绿化吊树作业", "title": "吊树看似轻松：树球重量估算翻车的现场复盘", "links": ["/rent/", "/trucks/12吨/"] },
+    { "id": "case-precast-yard", "category": "案例", "keyword": "预制构件吊装要点", "title": "预制构件吊装：吊点与翻身最见功夫", "links": ["/rent/", "/guide/"] },
+    { "id": "case-rental-vs-buy", "category": "案例", "keyword": "吊车自营还是外租", "title": "自己买车还是长期租？按年台班量算的那笔账", "links": ["/rent/", "/price/", "/trucks/"] },
+
+    { "id": "trend-emission-6", "category": "趋势", "keyword": "国六吊车二手行情", "title": "国六排放标准下，二手吊车的残值逻辑变了", "links": ["/price/", "/trucks/", "/guide/"] },
+    { "id": "trend-electric-hybrid", "category": "趋势", "keyword": "新能源吊车值得买吗", "title": "混动与电动吊车进了二手市场，现在该不该碰", "links": ["/trucks/", "/price/"] },
+    { "id": "trend-telematics", "category": "趋势", "keyword": "吊车车联网管理系统", "title": "车联网让二手吊车的车况第一次有了记录可查", "links": ["/trucks/", "/guide/"] },
+    { "id": "trend-residual-value", "category": "趋势", "keyword": "二手吊车保值率", "title": "哪些二手吊车最保值？三年折旧曲线背后的规律", "links": ["/trucks/徐工/", "/price/", "/sell/"] },
+    { "id": "trend-buyer-check", "category": "趋势", "keyword": "二手吊车验车清单", "title": "验车清单：从大臂焊缝到工时表交叉验证", "links": ["/trucks/", "/guide/"] },
+    { "id": "trend-transfer-doc", "category": "趋势", "keyword": "二手吊车过户手续", "title": "过户要跑几趟？资料清单与常见卡点", "links": ["/sell/", "/guide/"] },
+    { "id": "trend-hour-meter", "category": "趋势", "keyword": "吊车工时表能不能信", "title": "工时表能不能信：和车况交叉验证的几个办法", "links": ["/guide/", "/trucks/"] },
+    { "id": "trend-operator-gap", "category": "趋势", "keyword": "吊车司机招聘现状", "title": "车好找、司机难找：操作手缺口如何改变买车决策", "links": ["/rent/", "/guide/"] },
+    { "id": "trend-insurance", "category": "趋势", "keyword": "吊车保险怎么买", "title": "吊车保险怎么买不吃亏：险种搭配与常见拒赔点", "links": ["/trucks/", "/guide/"] },
+    { "id": "trend-price-season", "category": "趋势", "keyword": "二手吊车价格季节性", "title": "什么时候买二手吊车便宜？季节性规律与例外", "links": ["/price/", "/trucks/"] }
+  ]
+}

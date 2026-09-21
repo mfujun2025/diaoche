@@ -18,3 +18,8 @@ commit-msg.tmp
 # Pages 项目配置备份 / 本地构建探针
 .pages-config-backup.json
 .probe-build/
+
+# 每日文章机器人：执行日志 + dir 目标的本地产物 + 自测临时目录
+logs/
+out/
+.tmp-bot-test/

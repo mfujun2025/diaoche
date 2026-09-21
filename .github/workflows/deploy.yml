@@ -43,6 +43,8 @@ jobs:
           node scripts/test-auth.mjs
           node --no-warnings scripts/test-auth-db.mjs
           node --no-warnings scripts/test-md.mjs
+          # 每日文章机器人的离线自测（不联网、不需要任何凭据）
+          node scripts/test-bot.mjs
 
       # ★ 幂等建表：schema.sql 里全是 CREATE TABLE IF NOT EXISTS，
       #   反复执行安全。放在部署前，避免「代码上线了但库里没表 → 接口 500」。

@@ -1,0 +1,88 @@
+name: 每日文章
+
+# 每天北京时间 09:00 自动生成并发布一篇吊车文章。
+# ⚠️ GitHub Actions 的 cron 用 UTC：0 1 * * * = 北京时间 09:00。
+#    改时间要同时改这里和 config/article-bot.json 的 schedule.cron（两者保持一致）。
+
+on:
+  schedule:
+    - cron: '0 1 * * *'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: '只演练不发布'
+        type: boolean
+        default: false
+      topic:
+        description: '指定选题 id（留空自动挑选）'
+        type: string
+        required: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: daily-article
+  cancel-in-progress: false
+
+jobs:
+  article:
+    runs-on: ubuntu-latest
+    name: 生成并发布
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # 机器人全离线自测，不需要任何凭据 —— 每次先跑一遍，
+      # 保证流水线改动或配置改动不会悄悄把发布逻辑弄坏
+      - name: Bot self-test
+        run: node scripts/test-bot.mjs
+
+      - name: Run article bot
+        id: bot
+        continue-on-error: true
+        env:
+          LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+          LLM_BASE_URL: ${{ secrets.LLM_BASE_URL }}
+          LLM_MODEL: ${{ secrets.LLM_MODEL }}
+          # ★ 建议填 PAT（repo 权限），不要用内置的 GITHUB_TOKEN：
+          #   内置 token 的提交**不会触发**其它 workflow，文章就停在仓库里不上线。
+          ARTICLE_BOT_GH_TOKEN: ${{ secrets.ARTICLE_BOT_GH_TOKEN || secrets.GITHUB_TOKEN }}
+          ARTICLE_BOT_WEBHOOK: ${{ secrets.ARTICLE_BOT_WEBHOOK }}
+        run: |
+          args=""
+          if [ "${{ inputs.dry_run }}" = "true" ]; then args="--dry-run"; fi
+          if [ -n "${{ inputs.topic }}" ]; then args="$args --topic=${{ inputs.topic }}"; fi
+          echo "args: $args"
+          node scripts/bot/run.mjs $args
+
+      - name: Build static site
+        if: always() && steps.bot.outcome == 'success'
+        run: node scripts/build.mjs
+
+      # 兜底部署：不管上面用的是 PAT 还是内置 token，这里保证文章能真的上线
+      - name: Deploy to Cloudflare Pages
+        if: always() && steps.bot.outcome == 'success' && inputs.dry_run != 'true'
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          packageManager: npm
+          command: pages deploy dist --project-name=diaoche-cn
+
+      - name: Upload bot log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: article-bot-log
+          path: logs/*.jsonl
+          if-no-files-found: ignore
+
+      - name: Fail the job if bot failed
+        if: always() && steps.bot.outcome == 'failure'
+        run: |
+          echo "文章机器人执行失败，日志已上传为 artifact"
+          exit 1
