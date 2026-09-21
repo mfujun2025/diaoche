@@ -260,6 +260,48 @@ if (manifest) {
   }
 }
 
+/* ─── 7. 搜索引擎收录入口 ──────────────────────────────────────────
+   ⚠️ 判据统一用 Content-Type + 独有内容，不看状态码：
+   Pages 的 SPA 回落对不存在的文件也返回 **200 + 首页 HTML**。
+   （/robots.txt 返回 text/html = 文件压根没传上去，本项目踩过） */
+console.log('\n[7] 搜索引擎收录入口');
+async function checkFile(url, wantType, unique, label) {
+  try {
+    const r = await fetch(SITE + url);
+    const text = await r.text();
+    const ct = (r.headers.get('content-type') || '').toLowerCase();
+    if (!ct.includes(wantType)) {
+      bad(`★ ${url} 的 Content-Type 是 ${ct || '(缺失)'}，应为 ${wantType} —— 多半被 SPA 回落成首页 HTML`);
+    } else if (!text.includes(unique)) {
+      bad(`★ ${url} 内容不含「${unique}」`);
+    } else {
+      ok(`${label}（${url}）`);
+    }
+  } catch (e) {
+    bad(`${url} 请求失败：${e.message}`);
+  }
+}
+
+await checkFile('/robots.txt', 'text/plain', 'pages-sitemap.xml', 'robots.txt 正常且已声明 sitemap');
+// Bing 站长工具校验文件：内容必须原样返回，被回落成 HTML 就等于验证失败
+await checkFile('/BingSiteAuth.xml', 'xml', '8CD269EDDBF0B16EB275CDCFD026CE7C', 'Bing 验证文件可访问');
+
+try {
+  const idx = await getJson('/sitemap.xml');
+  const okIdx =
+    idx.text.includes('/pages-sitemap.xml') && idx.text.includes('/trucks-sitemap.xml');
+  if (okIdx) ok('sitemap.xml 索引包含两份子地图');
+  else bad('★ sitemap.xml 索引缺失子地图 —— 车源页或静态页不会被收录');
+
+  const ts = await getJson('/trucks-sitemap.xml');
+  const n = (ts.text.match(/<loc>/g) || []).length;
+  if (ts.status !== 200) bad(`★ /trucks-sitemap.xml 返回 ${ts.status}`);
+  else if (n === 0) bad('★ /trucks-sitemap.xml 里一条 URL 都没有 —— 检查 D1 是否有已审核车源');
+  else ok(`trucks-sitemap.xml 动态生成正常（${n} 条 URL）`);
+} catch (e) {
+  bad(`sitemap 检查失败：${e.message}`);
+}
+
 /* ─── 结果 ─────────────────────────────────────────────────────── */
 console.log(`\n[check-env] 通过 ${pass} 项`);
 if (fails.length) {

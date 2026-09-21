@@ -274,7 +274,11 @@ Disallow: /admin/
 # 筛选参数页是同一批车源的重复视图，交给 sitemap 里的规范页收录
 Disallow: /*?*
 
+# 站点地图：index 里挂着静态页与车源页两份子地图。
+# Bing 的文档建议把每个 sitemap 都列出来（不能只写 index），这里补齐。
 Sitemap: ${SITE.url}/sitemap.xml
+Sitemap: ${SITE.url}/pages-sitemap.xml
+Sitemap: ${SITE.url}/trucks-sitemap.xml
 `;
 }
 
@@ -314,9 +318,13 @@ function sitemapUrlEntries(list) {
         p.priority ?? (p.path === 'index.html' ? '1.0' : p.path === 'trucks/index.html' ? '0.9' : '0.7');
       const changefreq =
         p.changefreq ?? (p.path === 'index.html' || p.path === 'trucks/index.html' ? 'daily' : 'weekly');
+      // lastmod 默认是构建当天；但文章页要用它自己的发布日期 ——
+      // 否则每构建一次，所有文章的「最后修改」都被刷成今天，
+      // 搜索引擎会以为整站天天在改，反而降低信任。
+      const lastmod = p.lastmod || today;
       return `  <url>
     <loc>${xmlEsc(pageUrl(p.path))}</loc>
-    <lastmod>${today}</lastmod>
+    <lastmod>${lastmod}</lastmod>
     <changefreq>${changefreq}</changefreq>
     <priority>${priority}</priority>
   </url>`;
@@ -555,6 +563,8 @@ function articlePage(a) {
     ogDesc: a.description,
     ld: () => articleLd(a),
     body: articleBody(a),
+    // sitemap 里用文章自己的发布日期做 lastmod（见 sitemapUrlEntries 的说明）
+    lastmod: a.date,
     // 文章更新频率低于频道页，权重给低一档
     priority: '0.6',
     changefreq: 'monthly',
