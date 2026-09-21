@@ -27,8 +27,12 @@ if (!CHROME) {
   process.exit(1);
 }
 
+// 默认读本地 dist；设 SITE=https://xxx 则改测线上（内链改为真实请求验证）
+const SITE = String(process.env.SITE || '').replace(/\/+$/, '');
+const REMOTE = !!SITE;
+
 const DIST = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'dist');
-if (!existsSync(DIST)) {
+if (!REMOTE && !existsSync(DIST)) {
   console.error('dist 不存在，先跑 node scripts/build.mjs');
   process.exit(1);
 }
@@ -128,17 +132,18 @@ const VIEWPORTS = [
 ];
 
 const PAGES = [
-  { name: '/guide/ 列表页', file: 'guide/index.html' },
-  { name: '文章 /guide/25t-price/', file: 'guide/25t-price/index.html' },
-  { name: '文章 /guide/transfer-process/', file: 'guide/transfer-process/index.html' },
-  { name: '文章 /guide/hour-meter/', file: 'guide/hour-meter/index.html' },
+  { name: '/guide/ 列表页', path: '/guide/', file: 'guide/index.html' },
+  { name: '文章 /guide/25t-price/', path: '/guide/25t-price/', file: 'guide/25t-price/index.html' },
+  { name: '文章 /guide/transfer-process/', path: '/guide/transfer-process/', file: 'guide/transfer-process/index.html' },
+  { name: '文章 /guide/hour-meter/', path: '/guide/hour-meter/', file: 'guide/hour-meter/index.html' },
 ];
 
 console.log('[cdp-articles] 浏览器:', path.basename(CHROME));
+console.log('[cdp-articles] 目标:', REMOTE ? SITE : '本地 dist');
 console.log('');
 
 for (const page of PAGES) {
-  const url = pathToFileURL(path.join(DIST, page.file)).href;
+  const url = REMOTE ? SITE + page.path : pathToFileURL(path.join(DIST, page.file)).href;
 
   for (const vp of VIEWPORTS) {
     await cdp.send(
@@ -201,11 +206,25 @@ for (const page of PAGES) {
       assert(r.innerLinks.length >= 3, `${tag} — 正文内链 ≥3`, `实际 ${r.innerLinks.length}`);
 
       // 内链目标存在性。
-      // ⚠️ 跳过 /trucks/*：那是 functions/trucks/[[path]].ts 按需渲染的动态页，
-      //    本地 dist 里本来就没有对应文件，硬查会全判成断链（先踩了）。
-      const staticLinks = r.innerLinks.filter((h) => !h.startsWith('/trucks/'));
-      const missing = staticLinks.filter((h) => !existsSync(path.join(DIST, h, 'index.html')));
-      assert(missing.length === 0, `${tag} — ★ 静态内链目标真实存在`, `断链：${missing.join(', ')}`);
+      // 本地：查文件系统，但跳过 /trucks/*（那是 Functions 按需渲染的动态页，
+      //       dist 里本来就没有文件，硬查会全判成断链 —— 先踩了）。
+      // 线上：逐个真实请求，这时候 /trucks/* 反而能一起验。
+      if (REMOTE) {
+        const broken = [];
+        for (const h of r.innerLinks) {
+          try {
+            const res = await fetch(SITE + h, { method: 'HEAD', redirect: 'follow' });
+            if (!res.ok) broken.push(`${h} → ${res.status}`);
+          } catch (e) {
+            broken.push(`${h} → ${e.message}`);
+          }
+        }
+        assert(broken.length === 0, `${tag} — ★ 内链线上可达`, broken.join(', '));
+      } else {
+        const staticLinks = r.innerLinks.filter((h) => !h.startsWith('/trucks/'));
+        const missing = staticLinks.filter((h) => !existsSync(path.join(DIST, h, 'index.html')));
+        assert(missing.length === 0, `${tag} — ★ 静态内链目标真实存在`, `断链：${missing.join(', ')}`);
+      }
     } else {
       // 指南列表页：「深入阅读」+「常见问题速查」
       assert(r.postItems === 3, `${tag} — 列表显示 3 篇文章`, `实际 ${r.postItems}`);
