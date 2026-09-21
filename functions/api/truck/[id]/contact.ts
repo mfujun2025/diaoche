@@ -31,23 +31,21 @@ function requireLogin(_request: Request, _env: Env): { ok: false; msg: string } 
   return { ok: false, msg: '请先登录后再查看联系方式' };
 }
 
-/** 简单的来源校验：只接受同源页面发起的请求（挡掉最粗糙的直连爬取） */
+/** 简单的来源校验：只接受本站自有域名发起的请求（挡掉最粗糙的直连爬取） */
 function sameOrigin(request: Request): boolean {
   const ref = request.headers.get('Referer') || '';
   if (!ref) return false; // 无 Referer 一律拒绝（浏览器同源 fetch 一定会带）
   try {
-    const host = new URL(ref).host;
-    return (
-      // 生产域名（punycode + 中文域名两种形态）
-      host === 'xn--bqr649k.cn' ||
-      host === '吊车.cn' ||
-      // Pages 预览域（含带 commit 前缀的子域）
-      host === 'diaoche-cn.pages.dev' ||
-      host.endsWith('.diaoche-cn.pages.dev') ||
-      // 本地开发（wrangler pages dev）
-      host.startsWith('127.0.0.1:') ||
-      host.startsWith('localhost:')
-    );
+    // 去掉端口，统一小写
+    const host = new URL(ref).host.split(':')[0].toLowerCase();
+
+    // 本地开发（wrangler pages dev）
+    if (host === '127.0.0.1' || host === 'localhost') return true;
+
+    // 本站自有域名：用后缀匹配，这样 www / m / 任意子域都自动覆盖，
+    // 不会再出现「加了 www 域名但白名单漏配」这类问题。
+    const OWNED = ['xn--bqr649k.cn', 'diaoche-cn.pages.dev'];
+    return OWNED.some((d) => host === d || host.endsWith('.' + d));
   } catch {
     return false;
   }
