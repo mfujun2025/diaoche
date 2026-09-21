@@ -35,7 +35,8 @@
         }</div>`
       : '';
 
-    return `<article class="truck">
+    // 整块卡片可点击 → 跳详情页 /trucks/<id>/
+    return `<a class="truck" href="/trucks/${t.id}/">
       ${thumb}
       <div class="t-body">
         <div class="t-top"><span class="t-name">${esc(name)}</span>${price}</div>
@@ -45,8 +46,9 @@
           ${t.has_accident ? '<span class="tag acc">有事故记录</span>' : ''}
         </div>
         ${t.condition ? `<p class="t-cond">${esc(t.condition)}</p>` : ''}
+        <span class="t-more">查看详情 →</span>
       </div>
-    </article>`;
+    </a>`;
   }
 
   function parseQuery() {
@@ -108,6 +110,201 @@
     location.search = p.toString() ? '?' + p.toString() : '';
     return false;
   };
+
+  /* ───────── 车源详情页 ─────────
+     页面外壳由 functions/trucks/[[path]].ts 服务端渲染（带 SEO 信息），
+     这里负责拉接口把正文填进去、以及图片轮播和「查看联系方式」。 */
+  function renderDetail(el) {
+    const id = Number(el.dataset.id);
+    if (!id) return;
+
+    fetch('/api/truck/' + id, { headers: { Accept: 'application/json' } })
+      .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
+      .then((json) => {
+        if (!json.ok) throw new Error(json.msg || '加载失败');
+        const t = json.data;
+        const name = `${t.tonnage}吨 ${t.brand}${t.model ? ' ' + t.model : ''}`;
+        const hasPrice = t.price != null && Number(t.price) > 0;
+        const meta = [
+          t.year ? t.year + ' 年出厂' : '',
+          t.hours ? '工时 ' + t.hours + ' 小时' : '',
+          [t.province, t.city].filter(Boolean).join(' ') || '',
+        ].filter(Boolean);
+
+        el.innerHTML = `
+          <p class="crumb"><a href="/trucks/">← 返回车源大厅</a></p>
+          <div class="d-head">
+            <div>
+              <h1 class="d-title">${esc(name)}</h1>
+              <div class="d-tags">
+                <span class="tag">${BIZ_LABEL[t.biz_type] || '转让'}</span>
+                ${t.has_accident ? '<span class="tag acc">有事故/大修记录</span>' : ''}
+              </div>
+            </div>
+            <div class="d-price">
+              <b>${hasPrice ? esc(t.price) + esc(t.price_unit || '万元') : '面议'}</b>
+              <small>${hasPrice ? '卖家报价，可议' : '价格请与卖家协商'}</small>
+            </div>
+          </div>
+
+          <div class="d-layout">
+            <div>
+              ${galleryHtml(t.images, name)}
+              ${
+                t.condition
+                  ? `<div class="d-block"><h2>车况描述</h2><p class="d-cond">${esc(t.condition)}</p></div>`
+                  : ''
+              }
+            </div>
+            <div>
+              <div class="d-panel">
+                <table class="d-table">
+                  <tr><th>吨位</th><td><strong>${esc(t.tonnage)} 吨</strong></td></tr>
+                  <tr><th>品牌</th><td>${esc(t.brand)}${t.model ? ' ' + esc(t.model) : ''}</td></tr>
+                  ${t.year ? `<tr><th>出厂年份</th><td>${esc(t.year)} 年</td></tr>` : ''}
+                  ${t.hours ? `<tr><th>工作小时</th><td>${esc(t.hours)} 小时</td></tr>` : ''}
+                  ${meta[2] ? `<tr><th>所在地区</th><td>${esc(meta[2])}</td></tr>` : ''}
+                  <tr><th>价格</th><td class="em">${hasPrice ? esc(t.price) + esc(t.price_unit || '万元') : '面议'}</td></tr>
+                  <tr><th>事故记录</th><td class="${t.has_accident ? 'd-acc' : ''}">${t.has_accident ? '有' : '无'}</td></tr>
+                </table>
+              </div>
+              <div id="d-contact-slot">${contactPlaceholderHtml()}</div>
+              <p class="tip">本站不参与交易、不做担保。请务必先验车、核实权属与过户条件，切勿先付款。</p>
+            </div>
+          </div>
+        `;
+
+        bindGallery(el);
+        bindContact(el, id);
+      })
+      .catch(() => {
+        el.innerHTML =
+          '<p class="crumb"><a href="/trucks/">← 返回车源大厅</a></p>' +
+          '<p class="empty">车源加载失败，可能已下架。<a href="/trucks/">看看其他车源</a>。</p>';
+      });
+  }
+
+  /** 图片区：大图 + 缩略图切换；无图时给个占位 */
+  function galleryHtml(images, name) {
+    const imgs = (Array.isArray(images) ? images : []).filter((k) => typeof k === 'string' && k);
+    if (!imgs.length) {
+      return '<div class="d-gallery"><div class="d-noimg">该车源未上传照片</div></div>';
+    }
+    const thumbs = imgs
+      .map((k, i) => `<img src="${IMG_BASE}/${esc(k)}" alt="${esc(name)} 第${i + 1}张" data-i="${i}" class="${i === 0 ? 'on' : ''}">`)
+      .join('');
+    return `<div class="d-gallery">
+      <div class="d-main">
+        <img id="d-img" src="${IMG_BASE}/${esc(imgs[0])}" alt="${esc(name)}">
+        ${imgs.length > 1 ? `
+          <button type="button" class="d-nav d-prev" aria-label="上一张">‹</button>
+          <button type="button" class="d-nav d-next" aria-label="下一张">›</button>
+          <span class="d-idx" id="d-idx">1 / ${imgs.length}</span>` : ''}
+      </div>
+      ${imgs.length > 1 ? `<div class="d-thumbs">${thumbs}</div>` : ''}
+    </div>`;
+  }
+
+  function bindGallery(root) {
+    const main = root.querySelector('#d-img');
+    if (!main) return;
+    const list = Array.from(root.querySelectorAll('.d-thumbs img'));
+    const idxEl = root.querySelector('#d-idx');
+    if (!list.length) return;
+    let cur = 0;
+
+    const show = (i) => {
+      cur = (i + list.length) % list.length;
+      main.src = list[cur].src;
+      list.forEach((im, k) => im.classList.toggle('on', k === cur));
+      if (idxEl) idxEl.textContent = `${cur + 1} / ${list.length}`;
+    };
+
+    list.forEach((im) => im.addEventListener('click', () => show(Number(im.dataset.i))));
+    const prev = root.querySelector('.d-prev');
+    const next = root.querySelector('.d-next');
+    if (prev) prev.addEventListener('click', () => show(cur - 1));
+    if (next) next.addEventListener('click', () => show(cur + 1));
+  }
+
+  /** 联系方式区：默认只显示按钮，点了才请求 */
+  function contactPlaceholderHtml() {
+    return `<div class="d-contact">
+      <p class="hint">为保护卖家隐私，联系方式需点击后查看</p>
+      <button type="button" class="btn" id="d-ct-btn">查看联系方式</button>
+    </div>`;
+  }
+
+  function bindContact(root, id) {
+    const btn = root.querySelector('#d-ct-btn');
+    if (!btn) return;
+    btn.addEventListener('click', async () => {
+      btn.disabled = true;
+      btn.textContent = '获取中…';
+      try {
+        const res = await fetch(`/api/truck/${id}/contact`, { headers: { Accept: 'application/json' } });
+        const json = await res.json().catch(() => ({}));
+
+        // 需要登录 → 显示登录占位框（后期接真实登录时只改这里）
+        if (res.status === 401 && json.needLogin) {
+          root.querySelector('#d-contact-slot').innerHTML = loginGateHtml(json.msg);
+          bindLoginGate(root);
+          return;
+        }
+        if (!res.ok || !json.ok) {
+          btn.disabled = false;
+          btn.textContent = '查看联系方式';
+          alert(json.msg || '获取失败，请稍后重试');
+          return;
+        }
+        root.querySelector('#d-contact-slot').innerHTML = `<div class="d-contact">
+          <p class="hint">卖家联系方式</p>
+          <p class="val">${esc(json.data.contact)}</p>
+          <div class="d-ct-actions">
+            <button type="button" class="btn" id="d-ct-copy">复制号码</button>
+          </div>
+          <p class="tip" style="margin:14px 0 0">联系时请说明来自「吊车.cn」，并注意核实对方身份。</p>
+        </div>`;
+        const copyBtn = root.querySelector('#d-ct-copy');
+        if (copyBtn) {
+          copyBtn.addEventListener('click', async () => {
+            try {
+              await navigator.clipboard.writeText(json.data.contact);
+              copyBtn.textContent = '已复制 ✓';
+              setTimeout(() => (copyBtn.textContent = '复制号码'), 1800);
+            } catch {
+              copyBtn.textContent = '请长按号码复制';
+            }
+          });
+        }
+      } catch {
+        btn.disabled = false;
+        btn.textContent = '查看联系方式';
+        alert('网络错误，请稍后重试');
+      }
+    });
+  }
+
+  /** 登录占位框（真实登录后期再接） */
+  function loginGateHtml(msg) {
+    return `<div class="d-login">
+      <span class="soon">功能开发中</span>
+      <h3>登录后可查看联系方式</h3>
+      <p>为保护卖家隐私，联系方式需登录后查看。<br>登录功能正在开发，敬请期待。</p>
+      <div class="d-ct-actions">
+        <button type="button" class="btn" id="d-login-btn" disabled style="opacity:.55;cursor:default">登录（开发中）</button>
+        <a class="btn ghost" href="/trucks/">返回车源大厅</a>
+      </div>
+    </div>`;
+  }
+
+  function bindLoginGate() {
+    // 占位阶段按钮为 disabled，无需绑定。
+    // 后期接真实登录时：
+    //   1) 去掉按钮的 disabled / 内联样式，恢复可点
+    //   2) 在这里给 #d-login-btn 绑点击，弹真实登录框
+    //   3) 登录成功后重新执行 bindContact 里那段获取逻辑
+  }
 
   // 发布表单
   const MAX_IMG = 9;
@@ -250,6 +447,8 @@
       if (!params.biz_type && !list.dataset.biz && list.dataset.limit === '20') params.biz_type = 'sale';
       loadTrucks(list, params);
     }
+    const detail = document.getElementById('truck-detail');
+    if (detail) renderDetail(detail);
     bindSellForm();
   });
 })();

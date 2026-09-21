@@ -69,9 +69,89 @@ const ADMIN_CSS = `
 }
 `;
 
+/* ── 车源详情页样式 ──────────────────────────────────────────────
+   这个页面由 functions/trucks/[[path]].ts 按需渲染，走外链 style.css。
+   常规页面不需要这些类，但共用同一份文件，多出来的规则无副作用。 */
+const DETAIL_CSS = `
+.crumb{font-size:13.5px;margin-bottom:18px}
+.crumb a{color:var(--fg2)}
+.crumb a:hover{color:var(--brand)}
+
+.d-head{display:flex;justify-content:space-between;align-items:flex-start;gap:18px;flex-wrap:wrap;margin-bottom:20px}
+.d-title{font-size:26px;letter-spacing:-.5px;margin:0 0 8px}
+.d-tags{display:flex;gap:8px;flex-wrap:wrap;font-size:13px;color:var(--fg2)}
+.d-price{text-align:right;white-space:nowrap}
+.d-price b{display:block;font-size:30px;color:var(--brand);line-height:1.1}
+.d-price small{font-size:12.5px;color:var(--fg2)}
+
+.d-layout{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:26px;align-items:start}
+.d-gallery{border:1px solid var(--line);border-radius:var(--radius);overflow:hidden;background:#fff}
+.d-main{aspect-ratio:4/3;background:var(--bg2);position:relative}
+.d-main img{width:100%;height:100%;object-fit:contain;display:block;background:#0d0f12}
+.d-nav{position:absolute;top:50%;transform:translateY(-50%);width:38px;height:38px;border:0;border-radius:50%;
+  background:rgba(255,255,255,.9);color:var(--fg);font-size:19px;line-height:1;cursor:pointer;
+  box-shadow:var(--shadow);display:flex;align-items:center;justify-content:center}
+.d-nav:hover{background:#fff}
+.d-prev{left:10px}
+.d-next{right:10px}
+.d-idx{position:absolute;right:12px;bottom:12px;background:rgba(0,0,0,.6);color:#fff;
+  font-size:12.5px;padding:3px 10px;border-radius:20px}
+.d-thumbs{display:flex;gap:8px;padding:10px;overflow-x:auto;-webkit-overflow-scrolling:touch}
+.d-thumbs img{width:66px;height:50px;flex:0 0 66px;object-fit:cover;border-radius:6px;
+  border:2px solid transparent;cursor:pointer;background:var(--bg2)}
+.d-thumbs img.on{border-color:var(--brand)}
+.d-noimg{aspect-ratio:4/3;display:flex;align-items:center;justify-content:center;
+  color:var(--fg2);font-size:14px;background:var(--bg2)}
+
+.d-panel{border:1px solid var(--line);border-radius:var(--radius);background:#fff;padding:20px}
+.d-table{width:100%;border-collapse:collapse;font-size:14px}
+.d-table th,.d-table td{padding:9px 0;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+.d-table th{color:var(--fg2);font-weight:400;width:88px;white-space:nowrap}
+.d-table tr:last-child th,.d-table tr:last-child td{border-bottom:0}
+.d-table .em{color:var(--brand);font-weight:600}
+.d-acc{color:#b3261e;font-weight:600}
+
+.d-block{margin-top:22px}
+.d-block h2{font-size:16px;margin-bottom:10px}
+.d-cond{border:1px solid var(--line);border-radius:var(--radius);background:#fff;padding:18px;
+  color:var(--fg);font-size:14.5px;line-height:1.8;white-space:pre-wrap;word-break:break-word;margin:0}
+
+/* 联系方式：默认隐藏，点按钮才请求 */
+.d-contact{margin-top:22px;border:1px solid var(--line);border-radius:var(--radius);
+  background:#fff;padding:20px;text-align:center}
+.d-contact .hint{color:var(--fg2);font-size:13.5px;margin:0 0 14px}
+.d-contact .val{font-size:22px;font-weight:700;color:var(--brand);letter-spacing:.5px;
+  word-break:break-all;margin:0}
+.d-contact .btn{margin:0}
+.d-ct-actions{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:14px}
+
+/* 登录占位框 */
+.d-login{margin-top:22px;border:1px solid var(--line);border-radius:var(--radius);
+  background:#fff;padding:26px 20px;text-align:center}
+.d-login h3{font-size:16px;margin-bottom:8px}
+.d-login p{color:var(--fg2);font-size:13.5px;margin:0 0 16px}
+.d-login .soon{display:inline-block;font-size:12.5px;color:#a15c00;background:#fffaf2;
+  border:1px solid #f0dcc0;border-radius:20px;padding:3px 12px;margin-bottom:14px}
+
+@media(max-width:720px){
+  .d-layout{grid-template-columns:1fr;gap:18px}
+  .d-head{flex-direction:column;gap:10px}
+  .d-title{font-size:21px}
+  .d-price{text-align:left}
+  .d-price b{font-size:25px}
+  .d-panel{padding:16px}
+  .d-table th{width:76px}
+  .d-thumbs img{width:56px;height:42px;flex:0 0 56px}
+  .d-nav{width:34px;height:34px}
+  .d-contact{padding:16px}
+  .d-contact .val{font-size:19px}
+  .d-ct-actions{flex-direction:column}
+  .d-contact .btn{width:100%}
+}
+`;
+
 await rm(DIST, { recursive: true, force: true });
 await mkdir(DIST, { recursive: true });
-
 const css = await readCss();
 
 let count = 0;
@@ -82,9 +162,18 @@ for (const page of pages) {
   count++;
 }
 
+// 车源详情页（/trucks/<id>/）是 Functions 按需渲染的，拼不出内联样式，
+// 所以单独输出一份 style.css 给它外链引用。
+
 if (existsSync(path.join(ROOT, 'public'))) {
   await cp(path.join(ROOT, 'public'), DIST, { recursive: true });
 }
+
+// 额外输出一份独立 CSS 文件。
+// 常规页面仍然把 CSS 内联在 <style> 里（少一次请求，首屏更快）；
+// 这份 style.css 是给「按需渲染」的车源详情页用的 —— 那个页面由
+// functions/trucks/[[path]].ts 实时生成，拼不出内联样式，只能外链。
+await writeFile(path.join(DIST, 'style.css'), css + DETAIL_CSS, 'utf8');
 
 console.log(`[build] ${count} pages -> dist/`);
 
