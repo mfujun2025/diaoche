@@ -85,31 +85,59 @@ DC_ADMIN_KEY = "你的随机密钥"
 5. → ❌ 404 Not Found（Cloudflare Pages 的 404 页）
 ```
 
-**根因**：把两个域名（`xn--bqr649k.cn` + `diaoche-cn.pages.dev`）放在**同一个** Access 应用里，
-按官方文档属 **multi-domain application**，认证后 Access 需要靠**一串跨域重定向**逐域种 `CF_Authorization` cookie，
-其中会经过 `/cdn-cgi/access/authorized`。而这个路径在**自定义域名上返回 404**。
+**根因（2026-09-21 定案，有官方文档背书）**：
+
+> **这是 Cloudflare Pages 的已知限制，不是我们配置错了。**
+>
+> 官方 Pages Known Issues 原文：
+> *"It is currently not possible to add a custom domain with a Cloudflare Access policy already enabled on that domain."*
+> —— https://developers.cloudflare.com/pages/platform/known-issues/
+>
+> 社区同款报错（community.cloudflare.com/t/696011）：
+> *"I get a 404 page not found: `https://preview.example.com/cdn-cgi/access/authorized?nonce=etc…`
+> Everything works fine if I use the address directly `preview.example.pages.dev`"*
+
+**机制**：Access 认证完成后，必须把票（`nonce`/`state`）兑成 `CF_Authorization` cookie，
+而**兑票路径 `/<host>/cdn-cgi/access/authorized` 必须落在受保护的那个主机名上**。
+当受保护主机名是 Pages **自定义域名**时，所有 `/cdn-cgi/*` 都被 Pages 的静态资源层接管，
+根本没机会到 Cloudflare 边缘 —— 于是必 404。
+
+⚠️ **注意**：这跟「应用挂了几个域名」「Eager redirect cookie 开不开」**都无关**。
+早先（同一轮排查中）曾以为是 multi-domain application 的跨域种 cookie 导致，
+后来用 `certs` 路径实测推翻了该判断 —— 见下表。
 
 **实测对照（决定性证据）**：
 
 ```bash
-# 主域名（自定义域名）→ 404，请求被 Pages 抢走
-curl -s -o /dev/null -w "%{http_code}\n" \
-  "https://xn--bqr649k.cn/cdn-cgi/access/authorized?nonce=t&state=t"
-# => 404
+# /cdn-cgi/access/authorized —— 兑票路径
+xn--bqr649k.cn          => 404   ❌ Pages 抢走
+diaoche-cn.pages.dev    => 400   （走到了 Access，参数不合法才 400）
 
-# 预览域（Pages 系统域名）→ 400，走到了 Access（参数不合法才 400）
-curl -s -o /dev/null -w "%{http_code}\n" \
-  "https://diaoche-cn.pages.dev/cdn-cgi/access/authorized?nonce=t&state=t"
-# => 400
+# /cdn-cgi/access/certs —— 不是兑票路径，只是取签名公钥
+xn--bqr649k.cn          => 404   ❌ Pages 抢走
+diaoche-cn.pages.dev    => 200   ✅ 真实的 Access 公钥 JSON
+```
 
-# 而 pages.dev 的 /admin/ 在无痕窗口里根本不要求登录（cookie 被会话顺带种上了）
+**`certs` 这两行是定案关键**：`pages.dev` 上返回真实 200 JSON（CF 边缘正常处理），
+自定义域名上却是 404。证明**自定义域名上所有 `/cdn-cgi/*` 全被 Pages 静态层吃掉**，
+与是否多域名应用无关。
+
+**完整认证链路（实测解析 302 Location）**：
+
+```
+① GET xn--bqr649k.cn/admin/
+   → 302 mfujun.cloudflareaccess.com/cdn-cgi/access/login/xn--bqr649k.cn?redirect_url=/admin/
+② 在 team domain 输邮箱验证码，认证通过
+③ 跳回 xn--bqr649k.cn/cdn-cgi/access/authorized?nonce=...&state=...
+   ← ❌ 死结在这里，必 404
 ```
 
 **⚠️ 试过但无效的修法**：在 `_routes.json` 里加 `exclude: ["/cdn-cgi/*"]`。
 官方文档明确 `exclude` 的语义是「该路径不调用 Functions」，之后**仍回落到 Pages 静态资源**，
 找不到文件照样 404，**不会交回 CF 边缘处理**。
 
-**结论**：Pages 自定义域名与 Access 的 `/cdn-cgi/*` 处理存在冲突，**改用应用层密钥彻底绕开**。
+**结论**：Access + Pages 自定义域名 = **走不通**（Cloudflare 自己承认的限制）。
+→ **改用应用层密钥彻底绕开**。
 
 ### 现行方案：`DC_ADMIN_KEY` 密钥登录
 
