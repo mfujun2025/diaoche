@@ -304,24 +304,37 @@ assert(forged.needLogin, '伪造 token 仍返回 needLogin');
    ══════════════════════════════════════════════════════ */
 console.log('\n[6] 完整登录流程');
 
-// 只有在服务端开了 DC_MAIL_DEV_MODE 时才拿得到 devCode。
-// 没开的话，这里只能验证「发码成功但拿不到码」，并明确告知。
-const testEmail = `authtest+${Date.now()}@example.com`;
+// 拿验证码有三条路，按优先级：
+//   A. AUTH_TEST_EMAIL + AUTH_TEST_CODE —— 外部已发好码，直接注入（用于自己绕开限流；
+//      发码接口有「IP 每小时 5 次」限制，连续调试很容易撞墙）
+//   B. DC_MAIL_DEV_MODE=1 —— 服务端把码放进响应里
+//   C. 都没有 —— 只能验证「发码成功但拿不到码」，跳过后续流程
+const injectedEmail = process.env.AUTH_TEST_EMAIL || '';
+const injectedCode = process.env.AUTH_TEST_CODE || '';
+const useInjected = Boolean(injectedEmail && injectedCode);
 
-const sent = await ev(`(async () => {
-  const r = await fetch('/api/auth/send-code', {
-    method: 'POST',
-    headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({ email: ${JSON.stringify(testEmail)} })
-  });
-  return { status: r.status, body: await r.json().catch(()=>({})) };
-})()`);
+const testEmail = useInjected ? injectedEmail : `authtest+${Date.now()}@example.com`;
 
-assert(sent.status === 200, '发码请求成功（200）', `实际 ${sent.status} ${JSON.stringify(sent.body)}`);
-assert(sent.body.ok === true, '发码返回 ok');
-console.log(
-  `     devCode: ${sent.body.devCode ? sent.body.devCode : '（未开启开发模式，无法自动登录）'}`
-);
+let sent = { status: 0, body: {} };
+if (useInjected) {
+  console.log('     使用外部注入的邮箱与验证码（跳过发码，避开限流）');
+  sent = { status: 200, body: { ok: true, devCode: injectedCode } };
+} else {
+  sent = await ev(`(async () => {
+    const r = await fetch('/api/auth/send-code', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ email: ${JSON.stringify(testEmail)} })
+    });
+    return { status: r.status, body: await r.json().catch(()=>({})) };
+  })()`);
+
+  assert(sent.status === 200, '发码请求成功（200）', `实际 ${sent.status} ${JSON.stringify(sent.body)}`);
+  assert(sent.body.ok === true, '发码返回 ok');
+  console.log(
+    `     devCode: ${sent.body.devCode ? sent.body.devCode : '（未开启开发模式，无法自动登录）'}`
+  );
+}
 
 if (sent.body.devCode) {
   // —— 有码，走完整登录 ——
@@ -408,8 +421,10 @@ if (sent.body.devCode) {
   assert(afterOut.status === 401, '★ 退出后联系方式重新被拦（401）');
   assert(afterOut.needLogin, '退出后返回 needLogin');
 } else {
-  console.log('     ⏭  跳过完整登录流程（服务端未开 DC_MAIL_DEV_MODE）');
-  console.log('        要自动跑完整流程，临时设环境变量 DC_MAIL_DEV_MODE=1 后重试');
+  console.log('     ⏭  跳过完整登录流程（没拿到验证码）');
+  console.log('        任选一条路：');
+  console.log('        1) 服务端临时设 DC_MAIL_DEV_MODE=1（码会进响应，验证完必须删掉）');
+  console.log('        2) 自己先发一次码，再用 AUTH_TEST_EMAIL=xxx AUTH_TEST_CODE=123456 跑本脚本');
 }
 
 /* ══════════════════════════════════════════════════════
