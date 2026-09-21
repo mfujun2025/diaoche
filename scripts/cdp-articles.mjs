@@ -9,7 +9,7 @@
 //
 // 用法: node scripts/cdp-articles.mjs
 import { spawn } from 'node:child_process';
-import { existsSync, mkdtempSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -32,6 +32,18 @@ const SITE = String(process.env.SITE || '').replace(/\/+$/, '');
 const REMOTE = !!SITE;
 
 const DIST = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'dist');
+
+// 文章清单从源文件读，别写死篇数
+const ARTICLES_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'src', 'articles');
+const ARTICLE_SLUGS = (() => {
+  try {
+    return readdirSync(ARTICLES_DIR)
+      .filter((f) => f.endsWith('.md'))
+      .map((f) => f.replace(/\.md$/, ''));
+  } catch {
+    return [];
+  }
+})();
 if (!REMOTE && !existsSync(DIST)) {
   console.error('dist 不存在，先跑 node scripts/build.mjs');
   process.exit(1);
@@ -170,6 +182,7 @@ for (const page of PAGES) {
         blockquotes: art ? art.querySelectorAll('blockquote').length : 0,
         innerLinks: links.map((a) => a.getAttribute('href')),
         postItems: document.querySelectorAll('.post-item').length,
+        guideLinks: [...document.querySelectorAll('a[href^="/guide/"]')].map((a) => a.getAttribute('href')),
         crumbs: document.querySelectorAll('.crumb a').length,
         navLinks: document.querySelectorAll('.nav a').length,
         hasJsonLd: !!document.querySelector('script[type="application/ld+json"]'),
@@ -227,7 +240,14 @@ for (const page of PAGES) {
       }
     } else {
       // 指南列表页：「深入阅读」+「常见问题速查」
-      assert(r.postItems === 3, `${tag} — 列表显示 3 篇文章`, `实际 ${r.postItems}`);
+      // ⚠️ 不要写死篇数 —— 每发一篇都要回来改，漏改就误报。
+      // 正确判据：源文件里每篇文章的链接都必须在列表里出现。
+      assert(r.postItems >= ARTICLE_SLUGS.length, `${tag} — 列表条目 ${r.postItems} ≥ 文章数 ${ARTICLE_SLUGS.length}`, `实际 ${r.postItems}`);
+      {
+        const want = ARTICLE_SLUGS.map((s) => `/guide/${s}/`);
+        const missing = want.filter((h) => !r.guideLinks.includes(h));
+        assert(missing.length === 0, `${tag} — 每篇文章都有列表入口`, `缺：${missing.join(', ')}`);
+      }
       assert(r.pageH2 === 2, `${tag} — 两个 H2（深入阅读 / 常见问题速查）`, `实际 ${r.pageH2}`);
     }
   }
