@@ -35,6 +35,25 @@ jobs:
       - name: Build static site
         run: node scripts/build.mjs
 
+      # 跑测试：head 结构化数据 + 登录核心逻辑 + 登录 SQL 集成
+      # 这些测试全是纯逻辑 / 内存库，不需要网络和凭据，CI 里跑得飞快
+      - name: Run tests
+        run: |
+          node scripts/test-head.mjs
+          node scripts/test-auth.mjs
+          node --no-warnings scripts/test-auth-db.mjs
+
+      # ★ 幂等建表：schema.sql 里全是 CREATE TABLE IF NOT EXISTS，
+      #   反复执行安全。放在部署前，避免「代码上线了但库里没表 → 接口 500」。
+      #   历史上踩过这个坑（新增 login_codes 等表时线上接口全 500）。
+      - name: Apply D1 schema (idempotent)
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          packageManager: npm
+          command: d1 execute diaoche-db --file=./schema.sql --remote
+
       - name: Publish to Cloudflare Pages
         uses: cloudflare/wrangler-action@v3
         with:
