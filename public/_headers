@@ -1,0 +1,32 @@
+# 静态资源缓存策略
+#
+# ── 为什么需要这个文件 ────────────────────────────────────────────
+# Cloudflare Pages 对**非 HTML** 资源的默认响应头是
+#   Cache-Control: public, max-age=14400, must-revalidate
+# 即浏览器端 4 小时强缓存。这 4 小时内浏览器**完全不会回源**，
+# 于是出现一种极难受的状态：HTML 已经是新版了，但页面里引的 JS/CSS
+# 还是旧的 —— 前端改动最长要等 4 小时才对用户可见，而且用户怎么
+# 刷新都没用（`must-revalidate` 只在缓存过期后才起作用）。
+#
+# 2026-09-21 真实踩坑：登录功能上线后，站长本人在自己浏览器上看到的
+# 仍是「登录（开发中）」的旧占位卡片，排查一圈确认服务端已是新版，
+# 就是这个默认头导致的。本文件是对该事故的根治。
+#
+# ── 为什么用 max-age=0 而不是把小时数调小 ────────────────────────
+# 这些文件的**文件名里不带内容哈希**（app.js / style.css / admin.js），
+# 没法靠 URL 变化来让缓存失效。所以只能让浏览器每次使用前回源校验：
+#   - 内容没变 → 304 Not Modified（响应只有几百字节，几乎无开销）
+#   - 内容变了 → 200 + 新内容
+# 回源只回到 CF 边缘节点，不会打到源站，性能代价可以忽略。
+#
+# 以后若想改用长缓存提性能，前提是先把文件名改成带内容哈希的形式
+# （app.<hash>.js），到那时再改这里的规则。
+
+/app.js
+  Cache-Control: public, max-age=0, must-revalidate
+
+/admin.js
+  Cache-Control: public, max-age=0, must-revalidate
+
+/style.css
+  Cache-Control: public, max-age=0, must-revalidate

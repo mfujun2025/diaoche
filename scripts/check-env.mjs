@@ -175,6 +175,36 @@ try {
   bad(`文章页检查失败：${e.message}`);
 }
 
+/* ─── 6. 前端静态资源的缓存头 ─────────────────────────────────────
+   踩过的坑（2026-09-21）：CF Pages 对**非 HTML** 资源默认给
+     Cache-Control: public, max-age=14400
+   浏览器 4 小时内完全不会回源。于是出现「HTML 已是新版、页面里引的
+   JS 还是旧版」的组合 —— 站长本人在自己浏览器上看到登录功能仍显示
+   「登录（开发中）」的旧占位卡片，普通刷新怎么刷都没用。
+   已在 public/_headers 里改成 max-age=0, must-revalidate。
+   这里守住它：万一有人把强缓存加回来，CI 必须报红。
+   ⚠️ 这些文件名里不带内容哈希，想用长缓存得先改文件名。 */
+console.log('\n[6] 前端静态资源缓存头');
+for (const asset of ['/app.js', '/style.css', '/admin.js']) {
+  try {
+    const r = await fetch(SITE + asset);
+    const cc = r.headers.get('cache-control') || '(缺失)';
+    const m = cc.match(/max-age\s*=\s*(\d+)/i);
+    const age = m ? Number(m[1]) : 0;
+
+    if (r.status !== 200) {
+      bad(`${asset} 访问异常：${r.status}`);
+    } else if (age > 300) {
+      bad(`★ ${asset} 被强缓存 ${age}s —— 前端改动最长延迟 ${(age / 3600).toFixed(1)} 小时才对用户可见`);
+      console.log('      修复：public/_headers 里给它设 Cache-Control: public, max-age=0, must-revalidate');
+    } else {
+      ok(`${asset} 缓存头正常（${cc}）`);
+    }
+  } catch (e) {
+    bad(`${asset} 缓存头检查失败：${e.message}`);
+  }
+}
+
 /* ─── 结果 ─────────────────────────────────────────────────────── */
 console.log(`\n[check-env] 通过 ${pass} 项`);
 if (fails.length) {
