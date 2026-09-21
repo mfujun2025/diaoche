@@ -175,33 +175,88 @@ try {
   bad(`文章页检查失败：${e.message}`);
 }
 
-/* ─── 6. 前端静态资源的缓存头 ─────────────────────────────────────
+/* ─── 6. 静态资源指纹（内容哈希文件名）─────────────────────────────
    踩过的坑（2026-09-21）：CF Pages 对**非 HTML** 资源默认给
      Cache-Control: public, max-age=14400
    浏览器 4 小时内完全不会回源。于是出现「HTML 已是新版、页面里引的
    JS 还是旧版」的组合 —— 站长本人在自己浏览器上看到登录功能仍显示
    「登录（开发中）」的旧占位卡片，普通刷新怎么刷都没用。
-   已在 public/_headers 里改成 max-age=0, must-revalidate。
-   这里守住它：万一有人把强缓存加回来，CI 必须报红。
-   ⚠️ 这些文件名里不带内容哈希，想用长缓存得先改文件名。 */
-console.log('\n[6] 前端静态资源缓存头');
-for (const asset of ['/app.js', '/style.css', '/admin.js']) {
-  try {
-    const r = await fetch(SITE + asset);
-    const cc = r.headers.get('cache-control') || '(缺失)';
-    const m = cc.match(/max-age\s*=\s*(\d+)/i);
-    const age = m ? Number(m[1]) : 0;
-
-    if (r.status !== 200) {
-      bad(`${asset} 访问异常：${r.status}`);
-    } else if (age > 300) {
-      bad(`★ ${asset} 被强缓存 ${age}s —— 前端改动最长延迟 ${(age / 3600).toFixed(1)} 小时才对用户可见`);
-      console.log('      修复：public/_headers 里给它设 Cache-Control: public, max-age=0, must-revalidate');
+   试过 public/_headers 写 Cache-Control：自定义头能生效，
+   唯独 Cache-Control 被资源层锁死，改不动。
+   最终方案：文件名带内容哈希（app.<hash>.js），内容一变 URL 就变，
+   旧副本不可能被命中。这里守住三件事：清单存在、清单里的文件真能取到、
+   页面引用的就是清单里的那一份（构建产物与 Functions 没走偏）。 */
+console.log('\n[6] 静态资源指纹');
+const HASHED = /^\/(app|admin|style)\.[0-9a-f]{8}\.(js|css)$/;
+let manifest = null;
+try {
+  const m = await getJson('/assets.json');
+  manifest = m.json;
+  if (!manifest) {
+    bad(`★ /assets.json 取不到或不是 JSON（${m.status}）—— Functions 无法确定该引哪个资源`);
+  } else {
+    const keys = ['app', 'admin', 'css'];
+    const badKeys = keys.filter((k) => !HASHED.test(String(manifest[k] || '')));
+    if (badKeys.length) {
+      bad(`★ assets.json 里 ${badKeys.join('、')} 不是合法的哈希路径：${JSON.stringify(manifest)}`);
     } else {
-      ok(`${asset} 缓存头正常（${cc}）`);
+      ok(`assets.json 正常（${keys.map((k) => manifest[k]).join('  ')}）`);
+    }
+  }
+} catch (e) {
+  bad(`assets.json 检查失败：${e.message}`);
+}
+
+if (manifest) {
+  // 1) 清单里的文件必须真能取到（构建产物有没有传上去）
+  for (const [k, url] of Object.entries(manifest)) {
+    try {
+      const r = await fetch(SITE + url);
+      if (r.status === 200) {
+        ok(`${url} 可访问（200）`);
+      } else {
+        bad(`★ ${url} 访问失败：${r.status} —— 构建产物没传上去`);
+      }
+    } catch (e) {
+      bad(`${url} 请求失败：${e.message}`);
+    }
+  }
+
+  // 2) 静态页引用的必须是清单里那一份。
+  //    引用了旧名字 = 用户可能拿到 4 小时前的旧脚本。
+  try {
+    const home = await getJson('/');
+    if (home.text.includes(`src="${manifest.app}"`)) {
+      ok('首页引用的 JS 与清单一致');
+    } else if (home.text.includes('src="/app.js"')) {
+      bad('★ 首页还在引无哈希的 /app.js —— 改动可能延迟 4 小时才生效');
+    } else {
+      bad('★ 首页引用的 JS 与 assets.json 对不上（构建产物不同步）');
     }
   } catch (e) {
-    bad(`${asset} 缓存头检查失败：${e.message}`);
+    bad(`首页引用检查失败：${e.message}`);
+  }
+
+  // 3) Functions 渲染的页面（车源详情/长尾页）也要一致
+  try {
+    const list = await getJson('/api/trucks?limit=1');
+    const first = list.json && list.json.data && list.json.data[0];
+    const p = first ? `/trucks/${first.id}/` : null;
+    if (!p) {
+      ok('暂无车源，跳过详情页引用检查');
+    } else {
+      const r = await getJson(p);
+      const hasCss = r.text.includes(`href="${manifest.css}"`);
+      const hasApp = r.text.includes(`src="${manifest.app}"`);
+      if (hasCss && hasApp) {
+        ok(`车源详情页引用的 CSS/JS 与清单一致（${p}）`);
+      } else {
+        bad(`★ ${p} 引用不同步：CSS ${hasCss ? '对' : '错'}、JS ${hasApp ? '对' : '错'}`);
+        console.log('      Functions 读的是 dist/assets.json —— 构建与部署必须同一份产物');
+      }
+    }
+  } catch (e) {
+    bad(`详情页引用检查失败：${e.message}`);
   }
 }
 

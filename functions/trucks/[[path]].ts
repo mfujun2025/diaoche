@@ -24,6 +24,18 @@ interface Env { DB: D1Database; ASSETS: Fetcher }
 
 const SITE_URL = 'https://xn--bqr649k.cn';
 
+/* ── 静态资源指纹 ────────────────────────────────────────────────
+   这些页面是实时渲染的，引用 JS/CSS 时不能写死 `/app.js`：
+   CF Pages 给非 HTML 资源强缓存 4 小时（_headers 改不动），
+   写死名字 = 用户最长 4 小时拿到旧版脚本。
+   scripts/build.mjs 会产出 dist/assets.json（`{app,admin,css}` → 带哈希路径），
+   wrangler 部署时用 esbuild 把它内联进来，所以运行时零开销。
+   ⚠️ 必须先跑 `npm run build` 再部署，否则 dist/assets.json 不存在会打包失败。 */
+// @ts-ignore —— JSON 模块没有类型声明，esbuild 直接内联，不需要 tsc 认账
+import ASSETS_MANIFEST from '../../dist/assets.json';
+
+const A: { app: string; admin: string; css: string } = ASSETS_MANIFEST;
+
 /** 与前端、构建脚本共用的白名单，避免各处口径不一致 */
 const TONNAGES = [8, 12, 16, 20, 25, 35, 50, 80, 100];
 const PROVINCES = ['上海', '江苏', '浙江', '山东', '河南', '广东', '河北', '安徽'];
@@ -258,7 +270,7 @@ function buildRelated(q: Query): Array<{ label: string; href: string }> {
 
 const HEAD_COMMON = `<meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="stylesheet" href="/style.css">`;
+<link rel="stylesheet" href="${A.css}">`;
 
 const HEADER = `<header class="hd">
   <div class="wrap hd-in">
@@ -347,7 +359,7 @@ ${HEADER}
   </section>
 </main>
 ${FOOTER}
-<script src="/app.js" defer></script>
+<script src="${A.app}" defer></script>
 </body>
 </html>`;
 }
@@ -494,7 +506,7 @@ ${HEADER}
   }
 </main>
 ${FOOTER}
-<script src="/app.js" defer></script>
+<script src="${A.app}" defer></script>
 </body>
 </html>`;
 }

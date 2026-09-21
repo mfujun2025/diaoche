@@ -1,15 +1,17 @@
-# 探针版 _headers —— 判定 CF Pages 是否真的处理这个文件。
-# 三问：整体是否生效（Global）、精确路径是否匹配（Appjs）、Cache-Control 是否被特例对待。
-
-/*
-  X-DC-Probe-Global: 1
-
-/app.js
-  X-DC-Probe-Appjs: 1
-  Cache-Control: public, max-age=0, must-revalidate
-
-/style.css
-  Cache-Control: public, max-age=0, must-revalidate
-
-/admin.js
+# 2026-09-21 实测结论（别再试一次）：
+#   本项目里 **Cache-Control 改不动**。用 X-DC-Probe-* 探针验证过 ——
+#   自定义响应头正常生效（说明 _headers 被处理了），
+#   唯独 Cache-Control 对非 HTML 资源始终被资源层锁成
+#     Cache-Control: public, max-age=14400
+#   官方文档说可以覆盖，在这个项目上不行。
+#
+# 于是缓存策略改成「内容哈希文件名」：
+#   scripts/build.mjs 产出 app.<hash>.js / admin.<hash>.js / style.<hash>.css
+#   并把映射写进 dist/assets.json（Functions 渲染页面时读它）。
+#   内容一变文件名就变，浏览器和 CDN 都不可能命中旧副本，
+#   反而可以放心用长缓存 —— 不再依赖 Cache-Control。
+#
+# 下面这条只做一件事：确保 HTML 不被长缓存。
+# HTML 必须每次回源，否则页面里引用的哈希文件名更新不了。
+/*.html
   Cache-Control: public, max-age=0, must-revalidate

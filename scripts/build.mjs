@@ -1,6 +1,7 @@
 // 静态站构建脚本：生成 dist/ 下的全部页面
 import { mkdir, writeFile, rm, cp, readdir, readFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { pages, SITE, DISCLAIMER_SHORT, ORG_NODE, ARTICLES_PLACEHOLDER } from '../src/site.mjs';
@@ -196,6 +197,18 @@ await rm(DIST, { recursive: true, force: true });
 await mkdir(DIST, { recursive: true });
 const css = await readCss();
 
+/* ── 静态资源指纹（内容哈希文件名）─────────────────────────────────
+   为什么需要：
+     CF Pages 对**非 HTML** 资源默认给 `Cache-Control: public, max-age=14400`，
+     实测 `public/_headers` 里写 Cache-Control **改不动**（自定义头能生效，
+     唯独 Cache-Control 被资源层锁死）。于是浏览器 4 小时内完全不回源，
+     出现「HTML 已是新版、页面引用的 JS 还是旧版」——站长自己刷新也没用。
+   解法：文件名带内容哈希。内容一变 → 文件名变 → 浏览器与 CDN 都不可能
+     命中旧副本。这是前端的标准做法，且不依赖任何平台特性。
+   ⚠️ 必须在渲染页面之前算好：`render()` 里要用 assets.app，
+     而 `const` 不 hoist，声明晚了会踩 TDZ。 */
+const assets = await fingerprintAssets(css);
+
 /* favicon 三件套：SVG（现代浏览器，矢量清晰）+ ICO（老浏览器/采集器）+ apple-touch-icon。
    ⚠️ 必须声明在这里（render 调用之前）—— `const` 有 TDZ，声明在使用之后会直接报
    "Cannot access 'FAVICON' before initialization"。 */
@@ -228,7 +241,15 @@ if (existsSync(path.join(ROOT, 'public'))) {
 // 常规页面仍然把 CSS 内联在 <style> 里（少一次请求，首屏更快）；
 // 这份 style.css 是给「按需渲染」的车源详情页用的 —— 那个页面由
 // functions/trucks/[[path]].ts 实时生成，拼不出内联样式，只能外链。
+//
+// 这里保留**无哈希**的稳定名做兜底（万一有人只部署 functions 没跑构建，
+// 页面不至于 404 裸奔）；页面真正引用的是带哈希的那一份。
 await writeFile(path.join(DIST, 'style.css'), css + DETAIL_CSS, 'utf8');
+
+// 资源清单：给 Functions 用。
+// 车源详情/长尾页是 Functions 实时渲染的，它拿不到构建期的变量，
+// 只能读这份 JSON 才知道当前该引哪个哈希文件。
+await writeFile(path.join(DIST, 'assets.json'), JSON.stringify(assets, null, 2) + '\n', 'utf8');
 
 // ── SEO 基础文件 ────────────────────────────────────────────────
 // 这两个文件必须存在于 dist 根目录，否则会被 Pages 的 SPA 式回落
@@ -323,6 +344,37 @@ async function readCss() {
   return readFile(path.join(ROOT, 'src', 'style.css'), 'utf8');
 }
 
+/** 内容哈希文件名。
+ *
+ *  对 app.js / admin.js / style.css 各算一个 8 位 sha256 前缀，产出
+ *  `app.<hash>.js` 这样的名字写进 dist，并把映射关系返回。
+ *
+ *  返回结构刻意做成「键是逻辑名、值是站点绝对路径」——Functions 里直接
+ *  `assets.app` 就能拼进 HTML，不需要再拼字符串。
+ *
+ *  ⚠️ 哈希取自**文件内容**，不是时间戳：同一份内容在任何机器上构建都得到
+ *  同一个文件名，避免 CI 每次产出不同 diff。
+ */
+async function fingerprintAssets(css) {
+  const items = [
+    { key: 'app', name: 'app.js', content: await readFile(path.join(ROOT, 'public', 'app.js')) },
+    { key: 'admin', name: 'admin.js', content: await readFile(path.join(ROOT, 'public', 'admin.js')) },
+    { key: 'css', name: 'style.css', content: Buffer.from(css + DETAIL_CSS, 'utf8') },
+  ];
+
+  const out = {};
+  for (const it of items) {
+    const ext = path.extname(it.name); // .js / .css
+    const base = it.name.slice(0, -ext.length);
+    const hash = createHash('sha256').update(it.content).digest('hex').slice(0, 8);
+    const hashedName = `${base}.${hash}${ext}`;
+    await writeFile(path.join(DIST, hashedName), it.content);
+    out[it.key] = `/${hashedName}`;
+  }
+  console.log(`[build] 资源指纹: ${items.map((i) => out[i.key]).join('  ')}`);
+  return out;
+}
+
 function esc(s = '') {
   return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
@@ -408,7 +460,7 @@ ${FAVICON}${ldScript}
     <p class="ft-c">© ${new Date().getFullYear()} 吊车.cn</p>
   </div>
 </footer>
-<script src="/app.js" defer></script>
+<script src="${assets.app}" defer></script>
 </body>
 </html>`;
 }
@@ -436,7 +488,7 @@ ${FAVICON}
   </div>
 </header>
 <main>${body}</main>
-<script src="/admin.js" defer></script>
+<script src="${assets.admin}" defer></script>
 </body>
 </html>`;
 }
