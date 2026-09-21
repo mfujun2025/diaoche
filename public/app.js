@@ -169,7 +169,7 @@
                 </table>
               </div>
               <div id="d-contact-slot">${contactPlaceholderHtml()}</div>
-              <p class="tip">本站不参与交易、不做担保。请务必先验车、核实权属与过户条件，切勿先付款。</p>
+              ${disclaimerHtml()}
             </div>
           </div>
         `;
@@ -232,6 +232,23 @@
     return `<div class="d-contact">
       <p class="hint">为保护卖家隐私，联系方式需点击后查看</p>
       <button type="button" class="btn" id="d-ct-btn">查看联系方式</button>
+    </div>`;
+  }
+
+  /* 详情页免责声明
+     为什么逐条详情页都要有（而不是只在 footer 写一份）：
+     用户是从搜索引擎直接落到某条车源页的，未必会滚到底看 footer；
+     而纠纷恰恰最容易发生在这类页面上。所以声明必须贴着车源信息出现。
+     文案口径与 src/site.mjs 的 DISCLAIMER_FULL 保持一致。 */
+  function disclaimerHtml() {
+    return `<div class="d-disclaimer">
+      <h2>免责声明</h2>
+      <ul>
+        <li>本平台仅为买卖双方提供信息发布与展示服务，<strong>不参与、不担保实际交易环节</strong>。</li>
+        <li>所有设备信息（含吨位、年份、工时、价格、车况等）均由发布者自主提供，平台不做实质审核与真实性背书。</li>
+        <li>请在交易前务必<strong>线下验车</strong>、核实车辆权属与过户条件，<strong>切勿先付款</strong>。</li>
+        <li>交易风险由买卖双方自行承担。如遇虚假信息，可通过<a href="/sell/">「我要卖车」页面</a>反馈举报。</li>
+      </ul>
     </div>`;
   }
 

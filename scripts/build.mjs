@@ -3,7 +3,7 @@ import { mkdir, writeFile, rm, cp } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { pages, SITE } from '../src/site.mjs';
+import { pages, SITE, DISCLAIMER_SHORT } from '../src/site.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
@@ -133,6 +133,16 @@ const DETAIL_CSS = `
 .d-login .soon{display:inline-block;font-size:12.5px;color:#a15c00;background:#fffaf2;
   border:1px solid #f0dcc0;border-radius:20px;padding:3px 12px;margin-bottom:14px}
 
+/* 详情页免责声明：贴在车源信息下方，用户不必滚到 footer 才能看到 */
+.d-disclaimer{margin-top:18px;padding:16px 18px;background:var(--bg2);
+  border-left:3px solid var(--line);border-radius:0 var(--radius) var(--radius) 0}
+.d-disclaimer h2{font-size:13.5px;color:var(--fg2);font-weight:600;margin:0 0 8px}
+.d-disclaimer ul{margin:0;padding-left:18px;color:var(--fg2);font-size:12.5px;line-height:1.75}
+.d-disclaimer li{margin-bottom:4px}
+.d-disclaimer li:last-child{margin-bottom:0}
+.d-disclaimer strong{color:var(--fg);font-weight:600}
+.d-disclaimer a{color:var(--brand);text-decoration:underline}
+
 @media(max-width:720px){
   .d-layout{grid-template-columns:1fr;gap:18px}
   .d-head{flex-direction:column;gap:10px}
@@ -175,7 +185,98 @@ if (existsSync(path.join(ROOT, 'public'))) {
 // functions/trucks/[[path]].ts 实时生成，拼不出内联样式，只能外链。
 await writeFile(path.join(DIST, 'style.css'), css + DETAIL_CSS, 'utf8');
 
+// ── SEO 基础文件 ────────────────────────────────────────────────
+// 这两个文件必须存在于 dist 根目录，否则会被 Pages 的 SPA 式回落
+// 吃掉（返回首页 HTML 而不是 404），爬虫拿不到任何抓取指引。
+//
+// 注意：_routes.json 只 include /api/*、/img/*、/trucks/*，不含这两个路径，
+// 所以它们走静态资源直出 CDN，不会经过 Functions，性能最好。
+await writeFile(path.join(DIST, 'robots.txt'), renderRobots(), 'utf8');
+await writeFile(path.join(DIST, 'sitemap.xml'), renderSitemap(), 'utf8');
+await writeFile(path.join(DIST, 'pages-sitemap.xml'), renderPagesSitemap(), 'utf8');
+
 console.log(`[build] ${count} pages -> dist/`);
+
+/** robots.txt：允许抓取全部前台，禁掉后台与筛选参数页 */
+function renderRobots() {
+  return `User-agent: *
+Allow: /
+
+# 后台是密钥登录的，不需要被收录
+Disallow: /admin/
+
+# 筛选参数页是同一批车源的重复视图，交给 sitemap 里的规范页收录
+Disallow: /*?*
+
+Sitemap: ${SITE.url}/sitemap.xml
+`;
+}
+
+/** sitemap.xml：静态页 + 全部已审核车源详情页
+ *
+ * ⚠️ 车源详情页在构建阶段**查不到**（CI 里没有 D1 凭据），所以这里没法枚举。
+ *    改用 <sitemapindex> 指向一个动态 sitemap：/trucks-sitemap.xml
+ *    由 functions/trucks-sitemap.xml.ts 实时查库生成。
+ *    好处是新上架车源不需要重新构建就能被收录。 */
+function renderSitemap() {
+  const today = new Date().toISOString().slice(0, 10);
+
+  // 只收录前台可索引页；admin 是 noindex，不列
+  const staticPages = pages.filter((p) => p.layout !== 'admin');
+
+  const urls = staticPages.map((p) => {
+    const loc = p.path === 'index.html' ? `${SITE.url}/` : `${SITE.url}/${p.path.replace(/index\.html$/, '')}`;
+    // 首页权重最高，车源大厅次之
+    const priority = p.path === 'index.html' ? '1.0' : p.path === 'trucks/index.html' ? '0.9' : '0.7';
+    const changefreq = p.path === 'index.html' || p.path === 'trucks/index.html' ? 'daily' : 'weekly';
+    return `  <url>
+    <loc>${xmlEsc(loc)}</loc>
+    <lastmod>${today}</lastmod>
+    <changefreq>${changefreq}</changefreq>
+    <priority>${priority}</priority>
+  </url>`;
+  });
+
+  // 车源详情页由动态 sitemap 提供，这里用 sitemapindex 挂上去
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <sitemap>
+    <loc>${xmlEsc(SITE.url + '/pages-sitemap.xml')}</loc>
+    <lastmod>${today}</lastmod>
+  </sitemap>
+  <sitemap>
+    <loc>${xmlEsc(SITE.url + '/trucks-sitemap.xml')}</loc>
+    <lastmod>${today}</lastmod>
+  </sitemap>
+</sitemapindex>
+`;
+}
+
+/** 静态页部分的 sitemap，内容与 /sitemap.xml 的静态部分一致 */
+function renderPagesSitemap() {
+  const today = new Date().toISOString().slice(0, 10);
+  const staticPages = pages.filter((p) => p.layout !== 'admin');
+  const urls = staticPages.map((p) => {
+    const loc = p.path === 'index.html' ? `${SITE.url}/` : `${SITE.url}/${p.path.replace(/index\.html$/, '')}`;
+    const priority = p.path === 'index.html' ? '1.0' : p.path === 'trucks/index.html' ? '0.9' : '0.7';
+    const changefreq = p.path === 'index.html' || p.path === 'trucks/index.html' ? 'daily' : 'weekly';
+    return `  <url>
+    <loc>${xmlEsc(loc)}</loc>
+    <lastmod>${today}</lastmod>
+    <changefreq>${changefreq}</changefreq>
+    <priority>${priority}</priority>
+  </url>`;
+  });
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+${urls.join('\n')}
+</urlset>
+`;
+}
+
+function xmlEsc(s = '') {
+  return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' }[c]));
+}
 
 async function readCss() {
   const { readFile } = await import('node:fs/promises');
@@ -216,7 +317,7 @@ function render(page, css) {
 <footer class="ft">
   <div class="wrap">
     <p class="ft-t">吊车.cn — 二手吊车转让信息平台</p>
-    <p class="ft-d">本站仅提供信息发布与展示服务，不参与实际交易、不垫资、不做担保。信息由发布者提供，请自行核实车况与权属。</p>
+    <p class="ft-d">${esc(DISCLAIMER_SHORT)}</p>
     <p class="ft-c">© ${new Date().getFullYear()} 吊车.cn</p>
   </div>
 </footer>
