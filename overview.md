@@ -1,144 +1,101 @@
-# 吊车.cn 移动端优化 — 本轮总览
+# 后台 404 问题：排查结论与交付
 
-**日期**：2026-09-20
-**线上地址**：<https://xn--bqr649k.cn/>
-**提交**：`62bef18`（功能）+ `40dd890`（文档），CI 两次全绿
+## 一句话结论
 
----
-
-## 做了什么
-
-老孟反馈手机端卖车表单体验差。这次把全站 7 个页面在移动端的表现统一过了一遍，不只是改表单。
-
-### 1. 表单：从单列改回两列
-
-原来一进移动端就强制单列，8 个字段排了 1963px 高。改成 **720px 起保持两列**（只有 <380px 的极小屏才回单列），**降到 1489px（-24%）**。
-
-字段名都短（吨位、品牌、型号、年份…），两列排布完全放得下，一屏能多看好几个字段。
-
-### 2. 车源卡片：小图横排
-
-原来是 4:3 全宽大图，光图片就占 290px 高。改成 **112px 小图靠左、信息靠右**的横排布局，车源大厅从 **1269px 降到 890px**。
-
-### 3. 导航：去掉横向滚动
-
-原来 5 个导航项横向滚动，「避坑指南」被截在屏幕外——用户根本不知道还有这一项。改成均分一行，13px 字号下放得开。
-
-### 4. 筛选栏：4 个下拉改 2×2 网格
-
-原来 4 个下拉各占一行，加上按钮共 5 行。改网格后变 3 行。
-
-### 5. 表格：两种策略
-
-- **价格表**：移动端隐藏「说明」列，吨位/车龄/价格三列一屏看完
-- **后台表**：列太多（6 列）没法裁，改外层横向滚动
-
-### 6. 顺带修掉的小毛病
-
-- **裂图**：车源图片取不到时，自动把整个缩略图容器撤掉，不再显示丑陋的裂图占位
-- **「0万元」**：出租类车源价格是 0，原来显示「0万元」，现在显示「面议」
+**后台 404 不是代码问题，是 Cloudflare 的官方已知限制。** 代码侧已全部改造完并上线，剩下的 3 步在 Cloudflare 控制台，需要你手动点（我的 CF token 已失效，没权限）。
 
 ---
 
-## 验证结果
+## 病根定案
 
-用 Chrome DevTools Protocol 模拟 **390×844**（iPhone 级）视口，逐页体检：
+### 官方原文
 
-| 页面 | 文档宽 / 视口 | 页面高度 |
-| --- | --- | --- |
-| 首页 | 390 / 390 ✅ | 2081 |
-| 车源大厅 | 390 / 390 ✅ | 844 |
-| 我要卖车 | 390 / 390 ✅ | 1489 |
-| 吊车出租 | 390 / 390 ✅ | 1000 |
-| 行情价格 | 390 / 390 ✅ | 912 |
-| 避坑指南 | 390 / 390 ✅ | 1197 |
-| 后台 | 390 / 390 ✅ | 844 |
+Cloudflare Pages Known Issues 页面写着：
 
-**全站 7 页零横向溢出。**（后台页里 640px 的表格在容器内横滑，文档宽仍是 390，这是设计如此。）
+> *"It is currently not possible to add a custom domain with a Cloudflare Access policy already enabled on that domain."*
 
-验证是在**线上生产环境**跑的，不是本地。
+社区里有人报**一模一样的 404**：
+
+> *"I get a 404 page not found: `https://preview.example.com/cdn-cgi/access/authorized?nonce=etc…`
+> Everything works fine if I use the address directly `preview.example.pages.dev`"*
+
+### 机制
+
+Access 认证完成后，必须把票（`nonce` / `state`）兑成 `CF_Authorization` cookie，**兑票路径必须落在受保护的那个主机名上**。当受保护主机名是 Pages 自定义域名时，所有 `/cdn-cgi/*` 都被 Pages 的静态资源层接管，根本到不了 Cloudflare 边缘 —— 于是必 404。
+
+### 实测铁证
+
+| 路径 | `xn--bqr649k.cn` | `diaoche-cn.pages.dev` |
+|---|---|---|
+| `/cdn-cgi/access/authorized`（兑票） | **404** | 400（到了 Access） |
+| `/cdn-cgi/access/certs`（取公钥） | **404** | **200，真实 JSON** |
+
+`certs` 这两行是定案关键：同样是 `/cdn-cgi/*`，`pages.dev` 上 CF 边缘正常处理，自定义域名上直接 404。
+
+### 完整死循环
+
+```
+① GET xn--bqr649k.cn/admin/
+   → 302 mfujun.cloudflareaccess.com/cdn-cgi/access/login/xn--bqr649k.cn
+② 输邮箱验证码，认证通过
+③ 跳回 xn--bqr649k.cn/cdn-cgi/access/authorized?nonce=...
+   ← ❌ 死在这里
+```
+
+### 认知修正
+
+上一轮我以为病根是「多域名应用 + Eager redirect 跨域种 cookie」。**不准确**。真正病根更基础，跟应用挂几个域名、eager redirect 开不开**都无关**。
 
 ---
 
-## 改动文件
+## 已完成的代码改造
+
+后台防护从 Cloudflare Access 换成**应用层访问密钥**：
 
 | 文件 | 改动 |
-| --- | --- |
-| `src/style.css` | 重写移动端断点体系（720 / 520 / 379px） |
-| `src/site.mjs` | 价格页表格包 `.tbl-wrap` + 说明列 `.col-note`；后台表格同样处理 |
-| `scripts/build.mjs` | 后台页内联 CSS 补移动端适配 |
-| `public/app.js` | 图片 `onerror` 兜底；价格为 0 显示「面议」 |
-| `.gitignore` | 忽略 `.shots/`（本地无头验证产物） |
-| `SETUP-CHECKLIST.md` | 补充移动端实测结果 |
+|---|---|
+| `functions/api/admin/_auth.ts` | 读 `X-Admin-Key` 头，与 `DC_ADMIN_KEY` 恒定时间比较；未配置则一律拒绝（fail closed） |
+| `functions/api/admin/login.ts` | 新增 `POST /api/admin/login` 供前端校密钥 |
+| `public/admin.js` | 登录门禁；密钥存 localStorage；401 自动弹回登录框 |
+| `src/site.mjs` | 后台页拆成「登录框 + 主界面」两块 |
+| `scripts/build.mjs` | 补登录框样式（含移动端） |
+| `wrangler.toml` / 文档 | 变量换名 `ADMIN_TOKEN` → `DC_ADMIN_KEY`，清理旧名残留 |
 
----
-
-## 状态：全部完成 ✅
-
-站点已上线 · 图片上传 + 显示全链路已打通 · 后台 Access 防护已生效 · `ADMIN_EMAILS` 已填
-
-### 怎么进后台
-
-浏览器打开 **<https://xn--bqr649k.cn/admin/>**
-
-1. 跳到 Cloudflare 登录页
-2. 填邮箱 `548827878@qq.com`
-3. 收 6 位验证码邮件 → 填入
-4. 进入后台，可审核车源（里面有 2 条之前的测试数据，可以直接删掉）
-
-用的是 **One-time PIN** 方式，不需要额外配 Google/GitHub 登录。
-
----
-
-## Access 配置记录
-
-**已在 2026-09-21 配好并验证生效。**
-
-| 项 | 值 |
-| --- | --- |
-| Zero Trust 组织 | Team `mfujun`，`mfujun.cloudflareaccess.com`，Free |
-| 应用 | `吊车.cn`（一个应用管两个域名） |
-| Destinations | `吊车.cn/admin`、`吊车.cn/api/admin`、`diaoche-cn.pages.dev/admin`、`diaoche-cn.pages.dev/api/admin` |
-| 策略 | `allow-me` → Allow → Emails → `548827878@qq.com` |
-| `ADMIN_EMAILS` | `548827878@qq.com`（写在 `wrangler.toml`，与策略一致） |
-
-**线上验证（4 个路径全部 302 跳登录页，前台 6 页未受影响）**：
+### 本地实测（全绿）
 
 ```
-xn--bqr649k.cn/admin/              → 302
-xn--bqr649k.cn/api/admin/list      → 302
-diaoche-cn.pages.dev/admin/        → 302
-diaoche-cn.pages.dev/api/admin/list → 302
-前台 / /trucks/ /sell/ /rent/ /price/ /guide/ → 全部 200
+无密钥      login=401  list=401
+错密钥      login=401  {"ok":false,"msg":"访问密钥不正确"}
+对密钥      login=200  list=200  Bearer=200
+旧头名      X-Admin-Token=401
+前台 7 页   全部 200
 ```
 
-### ⚠️ 配的时候踩了两个坑
+wrangler 运行日志逐条印证，行为与预期完全一致。
 
-**坑一：Destinations 极其容易填错，且界面完全看不出来**
+### 线上状态
 
-Zero Trust 网页表单在 `Switch to custom input` 模式下，「域名」和「路径」会被合并成一个输入框，
-**很容易把 `域名/admin + api/admin` 整串填进 Domain 字段**。
-
-后果：Access 拿这整串去匹配请求，**永远匹配不上 → 策略完全失效**，
-但界面上看起来一切正常（Policies 列显示 `allow-me`，Destinations 有内容）。
-
-识别方法：用 API 读 `/accounts/{id}/access/apps`，看 `self_hosted_domains` 数组里
-每个元素是不是**独立的「域名/路径」**。
-
-**判据：Access 生效时未登录访问返回 302；返回 200 就是没拦住。**
-
-**坑二：`ADMIN_EMAILS` 在控制台改不了**
-
-本项目环境变量由 `wrangler.toml` 托管，所以控制台 Variables 页面全是灰色只读
-（点 `+ Add` 加同名会报 `already exists`）。控制台自己会提示「managed through wrangler.toml」。
-
-**改法：改 `wrangler.toml` 的 `[vars]`，push 后由 CI 生效。**
+- 提交 `65bb1f4` / `74868ff` 已推送，**CI run #22、#23 全绿**
+- 新代码**已部署上线**，但 Access 仍 302 拦截 —— 代码没机会执行
 
 ---
 
-## 剩余非阻塞项
+## 待你手动做的 3 步（详见项目里的 `下一步操作.md`）
 
-- **上传接口 `/api/upload` 无鉴权**：目前靠频率限制兜底（同 IP 每分钟 ≤20 次）。建议后续加 Turnstile 人机验证（比 Access 好——不会挡住正常卖家）
-- **线上测试数据**：2 条 pending 测试车源 + 1 个测试图对象。**前台不可见，无影响**，从后台删掉即可
-- **待吊销**：GitHub PAT `ghp_...SATU8`（之前对话中暴露过）
-- **待删除的两个临时 CF token**：`cfut_Urh2...`（只读）、`cfut_zRdge...`（读写）—— 都用完了
+1. **控制台加 Secret** `DC_ADMIN_KEY`（值 `eyOlJRg2TfjP6CYTqLCNIWW8MNhNlmJh`，本地已用同值实测通过）
+2. **删掉 Access 应用**（破坏性操作：只影响 Access 登录，前台/数据/图片都不受影响）
+3. **Retry deployment**（Secret 要重新部署才注入）
+
+做完跟我说一句，我立刻线上验证。
+
+---
+
+## 其他待办
+
+| 事项 | 说明 |
+|---|---|
+| `www` 前缀 522 | 加 DNS：`www` CNAME → `diaoche-cn.pages.dev`，橙云开启 |
+| 吊销 GitHub PAT `ghp_...SATU8` | 排查时暴露过 |
+| 删除 CF token `cfut_Urh2...` / `cfut_zRdge...` | `cfut_zRdge` 已失效（9109） |
+| 删线上 2 条测试车源（ID #2、#3） | 进后台就能看到 |
+| `/api/upload` 与 `/img` 无鉴权 | 可选上 Turnstile |
