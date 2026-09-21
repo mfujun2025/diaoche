@@ -10,7 +10,7 @@
 //
 // 退出码：0 成功 / 1 业务失败（生成或发布） / 2 配置或使用方式错误
 
-import { unlink, writeFile, mkdir } from 'node:fs/promises';
+import { unlink } from 'node:fs/promises';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 
@@ -124,13 +124,13 @@ async function main() {
   // ── 写本地 + 构建验证 ──────────────────────────────────────────
   const date = today();
   const markdown = toMarkdown(article, date);
-  const relPath = `${cfg.publish.git?.dir || 'src/articles'}/${article.slug}.md`;
-  const localAbs = path.join(cfg.repoRoot, relPath);
-  await mkdir(path.dirname(localAbs), { recursive: true });
-  await writeFile(localAbs, markdown, 'utf8');
-  console.log(`[bot] 已写入 ${relPath}`);
 
-  if (!NO_BUILD) {
+  const publisher = createPublisher(cfg);
+  const localAbs = await publisher.writeLocal({ markdown, slug: article.slug, date });
+  const relPath = localAbs ? path.relative(cfg.repoRoot, localAbs) : '(远端接口，不落盘)';
+  if (localAbs) console.log(`[bot] 已写入 ${relPath}`);
+
+  if (!NO_BUILD && localAbs) {
     try {
       execFileSync(process.execPath, [path.join(cfg.repoRoot, 'scripts', 'build.mjs')], {
         cwd: cfg.repoRoot,
@@ -148,7 +148,6 @@ async function main() {
   }
 
   // ── 发布 ──────────────────────────────────────────────────────
-  const publisher = createPublisher(cfg);
   let pub;
   try {
     pub = await publisher.publish({ article, markdown, slug: article.slug, date, dryRun: DRY_RUN });

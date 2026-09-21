@@ -255,6 +255,7 @@ section('端到端演练（离线）');
   await writeFile(tmpCfgPath, JSON.stringify(base, null, 2), 'utf8');
 
   const env = { ...process.env, LLM_PROVIDER: 'mock' };
+  const before = new Set((await readExisting(cfg)).map((e) => e.slug));
   const r = spawnSync(
     process.execPath,
     ['scripts/bot/run.mjs', '--dry-run', '--no-build', `--config=${path.relative(ROOT, tmpCfgPath).replace(/\\/g, '/')}`],
@@ -276,6 +277,12 @@ section('端到端演练（离线）');
   } catch (e) {
     bad(`产出检查失败：${e.message}`);
   }
+
+  // ★ 守卫：dir 目标绝不能把文件写进真实的文章目录
+  //   （踩过：run.mjs 里落盘路径写死了 src/articles，自测把脏文件灌进 src/articles 并被提交）
+  const after = new Set((await readExisting(cfg)).map((e) => e.slug));
+  const leaked = [...after].filter((s) => !before.has(s));
+  assert(leaked.length === 0, `演练没有污染 src/articles（泄漏 ${leaked.length} 个：${leaked.join(',')}）`);
 }
 
 await rm(tmpRoot, { recursive: true, force: true });

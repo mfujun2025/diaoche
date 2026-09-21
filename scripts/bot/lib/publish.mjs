@@ -13,13 +13,30 @@ import { publishSecret } from './config.mjs';
 
 export function createPublisher(cfg) {
   const target = cfg.publish.target;
-  if (target === 'git') return { target, publish: publishGit(cfg) };
-  if (target === 'http') return { target, publish: publishHttp(cfg) };
-  if (target === 'dir') return { target, publish: publishDir(cfg) };
+  if (target === 'git') return { target, writeLocal: gitLocal(cfg), publish: publishGit(cfg) };
+  if (target === 'http') return { target, writeLocal: async () => null, publish: publishHttp(cfg) };
+  if (target === 'dir') return { target, writeLocal: dirLocal(cfg), publish: publishDir(cfg) };
   throw new Error(`不支持的发布目标：${target}（可选 git / http / dir）`);
 }
 
+/**
+ * 本地落盘。由 publisher 而不是 run.mjs 决定路径 ——
+ * 曾经在 run.mjs 里写死 `${publish.git.dir}`，结果 dir 目标也会把文件写进
+ * src/articles（污染文章目录，还会被误提交）。目标说了算。
+ * 返回绝对路径；返回 null 表示这个目标不需要本地文件（http）。
+ */
+
 /* ───────────── git ───────────── */
+
+function gitLocal(cfg) {
+  const dir = cfg.publish.git?.dir || 'src/articles';
+  return async function ({ markdown, slug }) {
+    const abs = path.join(cfg.repoRoot, dir, `${slug}.md`);
+    await mkdir(path.dirname(abs), { recursive: true });
+    await writeFile(abs, markdown, 'utf8');
+    return abs;
+  };
+}
 
 function publishGit(cfg) {
   return async function ({ markdown, slug, date, dryRun }) {
@@ -30,11 +47,6 @@ function publishGit(cfg) {
     const relPath = `${dir}/${slug}.md`;
 
     if (!repo) throw new Error('缺少仓库名（环境变量 GITHUB_REPOSITORY 或配置的 repoDefault）');
-
-    // 1) 本地也写一份：本机调试用得上，也能被 build 直接读到
-    const abs = path.join(cfg.repoRoot, relPath);
-    await mkdir(path.dirname(abs), { recursive: true });
-    await writeFile(abs, markdown, 'utf8');
 
     if (dryRun) return { ok: true, dryRun: true, localPath: relPath, note: '仅写入本地，未提交' };
 
@@ -183,12 +195,20 @@ function publishHttp(cfg) {
 
 /* ───────────── dir ───────────── */
 
-function publishDir(cfg) {
+function dirLocal(cfg) {
+  const dir = path.join(cfg.repoRoot, cfg.publish.dir?.path || 'out/articles');
   return async function ({ markdown, slug }) {
-    const dir = path.join(cfg.repoRoot, cfg.publish.dir?.path || 'out/articles');
     await mkdir(dir, { recursive: true });
     const abs = path.join(dir, `${slug}.md`);
     await writeFile(abs, markdown, 'utf8');
+    return abs;
+  };
+}
+
+function publishDir(cfg) {
+  return async function ({ markdown, slug }) {
+    const write = dirLocal(cfg);
+    const abs = await write({ markdown, slug });
     return { ok: true, localPath: abs };
   };
 }
