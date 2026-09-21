@@ -39,7 +39,7 @@ function gitLocal(cfg) {
 }
 
 function publishGit(cfg) {
-  return async function ({ markdown, slug, date, dryRun }) {
+  return async function ({ markdown, slug, date, dryRun, force }) {
     const g = cfg.publish.git || {};
     const repo = process.env[g.repoEnv || 'GITHUB_REPOSITORY'] || g.repoDefault;
     const branch = process.env[g.branchEnv || 'ARTICLE_BOT_BRANCH'] || g.branchDefault || 'main';
@@ -56,8 +56,8 @@ function publishGit(cfg) {
     // 2) 远端是否存在同名文件 → 防重守卫（日志丢了也不至于覆盖）
     try {
       const existing = await api(`/contents/${relPath}?ref=${branch}`);
-      if (existing && existing.sha) {
-        return { ok: false, error: `远端已存在同名文件 ${relPath} —— 拒绝覆盖，请换 slug 重跑` };
+      if (existing && existing.sha && !force) {
+        return { ok: false, error: `远端已存在同名文件 ${relPath} —— 拒绝覆盖，请换 slug 重跑（确认要覆盖加 --force）` };
       }
     } catch (e) {
       if (!String(e.message).includes('404')) throw e;

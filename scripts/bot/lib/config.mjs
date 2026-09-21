@@ -104,10 +104,13 @@ export function publishSecret(cfg) {
 }
 
 /** 运行时前置检查：缺东西就报清楚，别等到跑了一半才失败。 */
-export function assertReady(cfg, { allowMock = true, dryRun = false } = {}) {
+export function assertReady(cfg, { allowMock = true, dryRun = false, skipLlm = false } = {}) {
   const missing = [];
 
-  if (cfg.llm.provider === 'mock') {
+  // skipLlm：人工投稿（--from-file）不调模型，不需要密钥
+  if (skipLlm) {
+    // pass
+  } else if (cfg.llm.provider === 'mock') {
     if (!allowMock) missing.push('LLM_PROVIDER=mock 不允许在正式运行里使用');
   } else if (!cfg.llm.apiKey) {
     missing.push(`${cfg.llm.apiKeyEnv || 'LLM_API_KEY'}（大模型密钥）`);

@@ -10,9 +10,11 @@
 //
 // 退出码：0 成功 / 1 业务失败（生成或发布） / 2 配置或使用方式错误
 
-import { unlink } from 'node:fs/promises';
+import { unlink, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
+
+import { parseFrontmatter } from '../lib/md.mjs';
 
 import { loadConfig, assertReady } from './lib/config.mjs';
 import { createLogger, today } from './lib/logger.mjs';
@@ -30,6 +32,7 @@ const DRY_RUN = flag('dry-run');
 const NO_BUILD = flag('no-build');
 const FORCE = flag('force');
 const WANT_TOPIC = opt('topic');
+const FROM_FILE = opt('from-file');
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -52,6 +55,9 @@ async function main() {
     console.log('[bot] schedule.enabled=false，跳过本次运行');
     return 0;
   }
+
+  // --from-file：人工撰写的稿件，跳过 LLM，但照旧走校验 / 构建 / 发布 / 记日志
+  if (FROM_FILE) return publishManuscript(cfg, FROM_FILE);
 
   // 正式运行不许用 mock —— mock 文章发上线是事故
   assertReady(cfg, { allowMock: DRY_RUN, dryRun: DRY_RUN });
@@ -150,7 +156,7 @@ async function main() {
   // ── 发布 ──────────────────────────────────────────────────────
   let pub;
   try {
-    pub = await publisher.publish({ article, markdown, slug: article.slug, date, dryRun: DRY_RUN });
+    pub = await publisher.publish({ article, markdown, slug: article.slug, date, dryRun: DRY_RUN, force: FORCE });
   } catch (e) {
     pub = { ok: false, error: e.message };
   }
@@ -182,6 +188,95 @@ async function main() {
   if (!DRY_RUN && cfg.publish.target === 'git') {
     console.log('      已提交到仓库，CI 会在几分钟内自动构建并部署到线上');
   }
+  return 0;
+}
+
+/**
+ * 人工投稿：--from-file <md> 走完整管线，只是不调模型。
+ * 用途：模型还没配好时的过渡、或人工改过的稿子想走同一条校验/发布链路。
+ */
+async function publishManuscript(cfg, file) {
+  const abs = path.resolve(cfg.repoRoot, file);
+  const raw = await readFile(abs, 'utf8');
+  const { meta, body } = parseFrontmatter(raw);
+  const article = {
+    title: String(meta.title || '').replace(/\s*\|\s*吊车\.cn\s*$/, '').trim(),
+    description: String(meta.description || '').trim(),
+    slug: String(meta.slug || path.basename(file, '.md')).trim(),
+    keyword: String(meta.keyword || '').trim(),
+    body: String(body || '').trim(),
+  };
+
+  assertReady(cfg, { skipLlm: true, dryRun: DRY_RUN });
+  const logger = createLogger(cfg);
+  // 稿件往往已经落在文章目录里（写完再跑这条命令），
+  // 得把它自己从「已发布」里摘掉，否则永远判成 slug 重复
+  const self = path.basename(file);
+  const existing = (await readExisting(cfg)).filter((e) => e.file !== self);
+  const t0 = Date.now();
+
+  console.log(`[bot] 人工投稿 ${path.relative(cfg.repoRoot, abs)}  目标=${cfg.publish.target}${DRY_RUN ? '  (dry-run)' : ''}`);
+
+  const result = validateArticle(article, cfg, { existing });
+  console.log(
+    `[bot] 校验：${result.metrics.words} 字 / H2 ${result.metrics.h2} 个 / 内链 ${result.metrics.links} 个 / 核心词密度 ${result.metrics.coreDensity}%`
+  );
+  for (const w of result.warnings) console.warn(`      ! ${w}`);
+  if (!result.ok) {
+    for (const e of result.errors) console.error(`      - ${e}`);
+    await logger.log({ level: 'error', status: 'validate-failed', slug: article.slug, title: article.title, error: result.errors.slice(0, 6).join('；') });
+    await logger.alert('人工稿件未通过校验', `${article.slug}：${result.errors.slice(0, 3).join('；')}`);
+    return 1;
+  }
+
+  const date = String(meta.date || today());
+  const markdown = toMarkdown(article, date);
+  const publisher = createPublisher(cfg);
+  const localAbs = await publisher.writeLocal({ markdown, slug: article.slug, date });
+  if (localAbs) console.log(`[bot] 已写入 ${path.relative(cfg.repoRoot, localAbs)}`);
+
+  if (!NO_BUILD && localAbs) {
+    try {
+      execFileSync(process.execPath, [path.join(cfg.repoRoot, 'scripts', 'build.mjs')], { cwd: cfg.repoRoot, stdio: 'pipe' }).toString();
+      console.log('[bot] 构建验证通过');
+    } catch (e) {
+      const msg = String(e.stderr || e.message).slice(0, 300);
+      await unlink(localAbs).catch(() => {});
+      await logger.log({ level: 'error', status: 'build-failed', slug: article.slug, title: article.title, error: msg });
+      await logger.alert('构建失败（已撤回草稿）', `${article.slug}：${msg}`);
+      console.error(`[bot] ✗ 构建失败，已删除草稿\n${msg}`);
+      return 1;
+    }
+  }
+
+  let pub;
+  try {
+    pub = await publisher.publish({ article, markdown, slug: article.slug, date, dryRun: DRY_RUN, force: FORCE });
+  } catch (e) {
+    pub = { ok: false, error: e.message };
+  }
+  const durationMs = Date.now() - t0;
+
+  if (!pub.ok) {
+    await logger.log({ level: 'error', status: 'publish-failed', slug: article.slug, title: article.title, durationMs, error: pub.error || '未知' });
+    await logger.alert('发布失败', `${article.slug}：${pub.error || '未知原因'}`);
+    console.error(`[bot] ✗ 发布失败：${pub.error}`);
+    return 1;
+  }
+
+  await logger.log({
+    level: 'info',
+    status: DRY_RUN ? 'dry-run' : 'success',
+    topicId: 'manual',
+    title: article.title,
+    slug: article.slug,
+    words: result.metrics.words,
+    attempts: 1,
+    durationMs,
+    dryRun: DRY_RUN,
+  });
+  await logger.trim();
+  console.log(`[bot] ✓ ${DRY_RUN ? '演练完成（未推送）' : '已发布'}  ${pub.url || pub.remotePath || pub.localPath || ''}`);
   return 0;
 }
 
