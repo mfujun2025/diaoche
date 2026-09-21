@@ -250,14 +250,6 @@
     if (next) next.addEventListener('click', () => show(cur + 1));
   }
 
-  /** 联系方式区：默认只显示按钮，点了才请求 */
-  function contactPlaceholderHtml() {
-    return `<div class="d-contact">
-      <p class="hint">为保护卖家隐私，联系方式需点击后查看</p>
-      <button type="button" class="btn" id="d-ct-btn">查看联系方式</button>
-    </div>`;
-  }
-
   /* 详情页免责声明
      为什么逐条详情页都要有（而不是只在 footer 写一份）：
      用户是从搜索引擎直接落到某条车源页的，未必会滚到底看 footer；
@@ -275,75 +267,270 @@
     </div>`;
   }
 
+  /**
+   * 获取并展示联系方式。
+   *
+   * 抽成独立函数，因为「登录成功后要自动再试一次」——
+   * 把逻辑内联在事件回调里就没法复用了。
+   */
+  async function loadContact(root, id, btn) {
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = '获取中…';
+    }
+    try {
+      const res = await fetch(`/api/truck/${id}/contact`, {
+        headers: { Accept: 'application/json' },
+      });
+      const json = await res.json().catch(() => ({}));
+
+      // 需要登录 → 显示登录框
+      if (res.status === 401 && json.needLogin) {
+        root.querySelector('#d-contact-slot').innerHTML = loginGateHtml(json.msg);
+        bindLoginGate(root, id);
+        return;
+      }
+      if (!res.ok || !json.ok) {
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = '查看联系方式';
+        }
+        alert(json.msg || '获取失败，请稍后重试');
+        return;
+      }
+
+      root.querySelector('#d-contact-slot').innerHTML = `<div class="d-contact">
+        <p class="hint">卖家联系方式</p>
+        <p class="val">${esc(json.data.contact)}</p>
+        <div class="d-ct-actions">
+          <button type="button" class="btn" id="d-ct-copy">复制号码</button>
+        </div>
+        <p class="tip" style="margin:14px 0 0">联系时请说明来自「吊车.cn」，并注意核实对方身份。</p>
+        <p class="d-me">已登录 · <button type="button" id="d-logout">退出登录</button></p>
+      </div>`;
+
+      const copyBtn = root.querySelector('#d-ct-copy');
+      if (copyBtn) {
+        copyBtn.addEventListener('click', async () => {
+          try {
+            await navigator.clipboard.writeText(json.data.contact);
+            copyBtn.textContent = '已复制 ✓';
+            setTimeout(() => (copyBtn.textContent = '复制号码'), 1800);
+          } catch {
+            copyBtn.textContent = '请长按号码复制';
+          }
+        });
+      }
+
+      const outBtn = root.querySelector('#d-logout');
+      if (outBtn) {
+        outBtn.addEventListener('click', async () => {
+          outBtn.disabled = true;
+          try {
+            await fetch('/api/auth/logout', { method: 'POST' });
+          } catch {
+            /* 失败也照样刷新，服务端可能已经清了 */
+          }
+          // 退出后回到「点按钮才显示」的初始态
+          root.querySelector('#d-contact-slot').innerHTML = contactPlaceholderHtml();
+          bindContact(root, id);
+        });
+      }
+    } catch {
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = '查看联系方式';
+      }
+      alert('网络错误，请稍后重试');
+    }
+  }
+
   function bindContact(root, id) {
     const btn = root.querySelector('#d-ct-btn');
     if (!btn) return;
-    btn.addEventListener('click', async () => {
-      btn.disabled = true;
-      btn.textContent = '获取中…';
-      try {
-        const res = await fetch(`/api/truck/${id}/contact`, { headers: { Accept: 'application/json' } });
-        const json = await res.json().catch(() => ({}));
-
-        // 需要登录 → 显示登录占位框（后期接真实登录时只改这里）
-        if (res.status === 401 && json.needLogin) {
-          root.querySelector('#d-contact-slot').innerHTML = loginGateHtml(json.msg);
-          bindLoginGate(root);
-          return;
-        }
-        if (!res.ok || !json.ok) {
-          btn.disabled = false;
-          btn.textContent = '查看联系方式';
-          alert(json.msg || '获取失败，请稍后重试');
-          return;
-        }
-        root.querySelector('#d-contact-slot').innerHTML = `<div class="d-contact">
-          <p class="hint">卖家联系方式</p>
-          <p class="val">${esc(json.data.contact)}</p>
-          <div class="d-ct-actions">
-            <button type="button" class="btn" id="d-ct-copy">复制号码</button>
-          </div>
-          <p class="tip" style="margin:14px 0 0">联系时请说明来自「吊车.cn」，并注意核实对方身份。</p>
-        </div>`;
-        const copyBtn = root.querySelector('#d-ct-copy');
-        if (copyBtn) {
-          copyBtn.addEventListener('click', async () => {
-            try {
-              await navigator.clipboard.writeText(json.data.contact);
-              copyBtn.textContent = '已复制 ✓';
-              setTimeout(() => (copyBtn.textContent = '复制号码'), 1800);
-            } catch {
-              copyBtn.textContent = '请长按号码复制';
-            }
-          });
-        }
-      } catch {
-        btn.disabled = false;
-        btn.textContent = '查看联系方式';
-        alert('网络错误，请稍后重试');
-      }
-    });
+    btn.addEventListener('click', () => loadContact(root, id, btn));
   }
 
-  /** 登录占位框（真实登录后期再接） */
-  function loginGateHtml(msg) {
-    return `<div class="d-login">
-      <span class="soon">功能开发中</span>
-      <h3>登录后可查看联系方式</h3>
-      <p>为保护卖家隐私，联系方式需登录后查看。<br>登录功能正在开发，敬请期待。</p>
+  /** 联系方式区域的初始态（退出登录后要还原成这个） */
+  function contactPlaceholderHtml() {
+    return `<div class="d-contact">
+      <p class="hint">联系方式由发布者提供，查看前需登录</p>
       <div class="d-ct-actions">
-        <button type="button" class="btn" id="d-login-btn" disabled style="opacity:.55;cursor:default">登录（开发中）</button>
-        <a class="btn ghost" href="/trucks/">返回车源大厅</a>
+        <button type="button" class="btn" id="d-ct-btn">查看联系方式</button>
       </div>
+      <p class="tip" style="margin:14px 0 0">登录仅用于防止信息被批量抓取，不会公开您的邮箱。</p>
     </div>`;
   }
 
-  function bindLoginGate() {
-    // 占位阶段按钮为 disabled，无需绑定。
-    // 后期接真实登录时：
-    //   1) 去掉按钮的 disabled / 内联样式，恢复可点
-    //   2) 在这里给 #d-login-btn 绑点击，弹真实登录框
-    //   3) 登录成功后重新执行 bindContact 里那段获取逻辑
+  /** 登录框（邮箱验证码） */
+  function loginGateHtml(msg) {
+    return `<div class="d-login">
+      <h3>登录后可查看联系方式</h3>
+      <p>${esc(msg || '为保护卖家隐私，联系方式需登录后查看。')}<br>登录仅用于防止信息被批量抓取，不会公开您的邮箱。</p>
+      <form id="d-login-form" novalidate>
+        <div class="d-field">
+          <label for="d-email">邮箱</label>
+          <input type="email" id="d-email" name="email" autocomplete="email"
+                 placeholder="you@example.com" required>
+        </div>
+        <div class="d-code-row">
+          <div class="d-field">
+            <label for="d-code">验证码</label>
+            <input type="text" id="d-code" name="code" inputmode="numeric" maxlength="6"
+                   autocomplete="one-time-code" placeholder="6 位数字" required>
+          </div>
+          <button type="button" class="d-send" id="d-send">获取验证码</button>
+        </div>
+        <p class="d-err" id="d-err" role="alert"></p>
+        <button type="submit" class="btn" id="d-login-btn">登录</button>
+      </form>
+      <p class="d-alt">
+        首次登录将自动创建账号 · <a href="/trucks/">返回车源大厅</a>
+      </p>
+    </div>`;
+  }
+
+  function bindLoginGate(root, id) {
+    const form = root.querySelector('#d-login-form');
+    const emailEl = root.querySelector('#d-email');
+    const codeEl = root.querySelector('#d-code');
+    const sendBtn = root.querySelector('#d-send');
+    const submitBtn = root.querySelector('#d-login-btn');
+    const errEl = root.querySelector('#d-err');
+    if (!form || !emailEl || !codeEl || !sendBtn || !submitBtn) return;
+
+    let countdown = 0;
+    let timer = null;
+
+    function showErr(msg) {
+      errEl.textContent = msg || '';
+    }
+
+    /** 倒计时：顺便防连点，比单纯禁用按钮的体验好（用户知道还要等多久） */
+    function startCountdown(sec) {
+      countdown = sec;
+      sendBtn.disabled = true;
+      sendBtn.textContent = `${countdown} 秒后重发`;
+      timer = setInterval(() => {
+        countdown--;
+        if (countdown <= 0) {
+          clearInterval(timer);
+          timer = null;
+          sendBtn.disabled = false;
+          sendBtn.textContent = '重新获取';
+          return;
+        }
+        sendBtn.textContent = `${countdown} 秒后重发`;
+      }, 1000);
+    }
+
+    sendBtn.addEventListener('click', async () => {
+      showErr('');
+      const email = emailEl.value.trim();
+      if (!email) {
+        showErr('请先填写邮箱');
+        emailEl.focus();
+        return;
+      }
+
+      sendBtn.disabled = true;
+      sendBtn.textContent = '发送中…';
+      try {
+        const res = await fetch('/api/auth/send-code', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email }),
+        });
+        const json = await res.json().catch(() => ({}));
+
+        if (!res.ok || !json.ok) {
+          showErr(json.msg || '发送失败，请稍后重试');
+          sendBtn.disabled = false;
+          sendBtn.textContent = '获取验证码';
+          return;
+        }
+
+        startCountdown(60);
+        codeEl.focus();
+
+        // 开发模式：验证码直接写在响应里，帮测试者拿到码
+        if (json.devCode) {
+          showErr('');
+          codeEl.value = json.devCode;
+          const tip = root.querySelector('#d-err');
+          tip.style.color = '#a15c00';
+          tip.textContent = `开发模式：验证码已自动填入（${json.devCode}）`;
+        } else {
+          showErr('验证码已发送，请查收邮件（含垃圾箱）');
+          const tip = root.querySelector('#d-err');
+          tip.style.color = '#2e7d32';
+        }
+      } catch {
+        showErr('网络错误，请稍后重试');
+        sendBtn.disabled = false;
+        sendBtn.textContent = '获取验证码';
+      }
+    });
+
+    // 验证码框：只留数字，输入 6 位自动聚焦登录按钮
+    codeEl.addEventListener('input', () => {
+      codeEl.value = codeEl.value.replace(/\D/g, '').slice(0, 6);
+      if (codeEl.value.length === 6) submitBtn.focus();
+    });
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      showErr('');
+
+      const email = emailEl.value.trim();
+      const code = codeEl.value.trim();
+
+      if (!email) {
+        showErr('请输入邮箱');
+        emailEl.focus();
+        return;
+      }
+      if (!/^\d{6}$/.test(code)) {
+        showErr('请输入 6 位数字验证码');
+        codeEl.focus();
+        return;
+      }
+
+      submitBtn.disabled = true;
+      submitBtn.textContent = '登录中…';
+      try {
+        const res = await fetch('/api/auth/verify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, code }),
+        });
+        const json = await res.json().catch(() => ({}));
+
+        if (!res.ok || !json.ok) {
+          showErr(json.msg || '登录失败，请重试');
+          submitBtn.disabled = false;
+          submitBtn.textContent = '登录';
+          // 验证码作废类错误（过期/超次数）→ 清空输入并恢复发码按钮
+          if (json.fatal) {
+            codeEl.value = '';
+            if (timer) {
+              clearInterval(timer);
+              timer = null;
+            }
+            sendBtn.disabled = false;
+            sendBtn.textContent = '重新获取';
+          }
+          return;
+        }
+
+        // ★ 登录成功 → 直接重新拉联系方式，不用用户再点一次
+        await loadContact(root, id, null);
+      } catch {
+        showErr('网络错误，请稍后重试');
+        submitBtn.disabled = false;
+        submitBtn.textContent = '登录';
+      }
+    });
   }
 
   // 发布表单

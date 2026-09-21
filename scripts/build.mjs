@@ -125,13 +125,44 @@ const DETAIL_CSS = `
 .d-contact .btn{margin:0}
 .d-ct-actions{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:14px}
 
-/* 登录占位框 */
+/* 登录框（邮箱验证码） */
 .d-login{margin-top:22px;border:1px solid var(--line);border-radius:var(--radius);
   background:#fff;padding:26px 20px;text-align:center}
 .d-login h3{font-size:16px;margin-bottom:8px}
 .d-login p{color:var(--fg2);font-size:13.5px;margin:0 0 16px}
 .d-login .soon{display:inline-block;font-size:12.5px;color:#a15c00;background:#fffaf2;
   border:1px solid #f0dcc0;border-radius:20px;padding:3px 12px;margin-bottom:14px}
+
+/* 登录表单 */
+.d-login form{max-width:360px;margin:0 auto;text-align:left}
+.d-field{margin-bottom:12px}
+.d-field label{display:block;font-size:13px;color:var(--fg2);margin-bottom:6px}
+.d-field input{width:100%;box-sizing:border-box;padding:12px 14px;font-size:15px;
+  border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--fg);outline:none;
+  transition:border-color .15s}
+.d-field input:focus{border-color:var(--brand)}
+.d-field input:disabled{background:var(--bg2);color:var(--fg2)}
+.d-field input::placeholder{color:#b6bac0}
+/* 验证码输入：字距拉开，方便核对数字 */
+#d-code{letter-spacing:6px;font-weight:600}
+.d-code-row{display:flex;gap:8px;align-items:stretch}
+.d-code-row .d-field{flex:1;margin-bottom:12px}
+.d-send{flex:0 0 auto;padding:0 14px;font-size:13.5px;border:1px solid var(--line);
+  border-radius:8px;background:#fff;color:var(--fg);cursor:pointer;white-space:nowrap;
+  transition:background .15s,border-color .15s}
+.d-send:hover:not(:disabled){background:var(--bg2);border-color:var(--fg2)}
+.d-send:disabled{color:var(--fg2);cursor:default;background:var(--bg2)}
+.d-err{color:#b3261e;font-size:13px;margin:0 0 10px;min-height:18px}
+.d-err:empty{display:none}
+.d-login .btn{width:100%;margin-top:2px}
+.d-login .d-alt{margin:14px 0 0;font-size:12.5px;color:var(--fg2);text-align:center}
+.d-login .d-alt a{color:var(--fg2);text-decoration:underline}
+.d-login .d-alt a:hover{color:var(--brand)}
+/* 已登录态：显示退出入口 */
+.d-me{font-size:13px;color:var(--fg2);margin:14px 0 0}
+.d-me button{background:none;border:0;padding:0;color:var(--fg2);font-size:13px;
+  text-decoration:underline;cursor:pointer;font-family:inherit}
+.d-me button:hover{color:var(--brand)}
 
 /* 详情页免责声明：贴在车源信息下方，用户不必滚到 footer 才能看到 */
 .d-disclaimer{margin-top:18px;padding:16px 18px;background:var(--bg2);
