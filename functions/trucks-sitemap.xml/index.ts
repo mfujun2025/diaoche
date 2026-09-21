@@ -1,12 +1,16 @@
-// GET /trucks-sitemap.xml — 车源详情页的动态 sitemap
+// GET /trucks-sitemap.xml — 车源详情页 + 长尾筛选页的动态 sitemap
 //
 // 为什么用动态：
 //   本站是纯静态构建（GitHub Actions 里跑 build.mjs），**构建阶段拿不到 D1 数据**
 //   （CI 里没有数据库凭据，也不该依赖），所以没法在构建时枚举车源 id 生成静态 sitemap。
 //   而车源是随时增删的 —— 每上一条新车源就重新构建一次不现实。
 //
-//   所以这里实时查库，把当前所有「已审核」车源的详情页列出来。
-//   好处：新上架车源立即进入 sitemap，不需要等构建。
+//   这里实时查库，输出两类 URL：
+//     ① 每条「已审核」车源的详情页 /trucks/<id>/
+//     ② 有车源的筛选组合页 /trucks/25吨/ 、 /trucks/25吨/江苏/ ...
+//
+// ⚠️ 组合页只收录「查出来有车」的。空页会在 Function 里返回 404，
+//    若把 404 塞进 sitemap，等于主动向搜索引擎报错，会拖累整站质量评分。
 //
 // ⚠️ _routes.json 的 include 里必须含 "/trucks-sitemap.xml"，
 //    否则请求会落到静态资源查找 → 找不到 → 被 SPA 式回落吃掉（返回首页 HTML）。
@@ -27,31 +31,66 @@ export const onRequest: PagesFunction<Env> = async (ctx) => {
   }
 
   let rows: Array<{ id: number; created_at: string }> = [];
+  let combos: Array<{ t: number | null; p: string | null; n: number; last: string }> = [];
   try {
     const res = await ctx.env.DB
       .prepare(`SELECT id, created_at FROM trucks WHERE status = 'approved' ORDER BY id DESC LIMIT 5000`)
       .all();
     rows = (res.results || []) as Array<{ id: number; created_at: string }>;
+
+    // 按「吨位 / 地区 / 吨位+地区」三种粒度聚合，带出每组的最新时间与条数。
+    // 用 UNION ALL 一次查完，避免在 Worker 里循环发多次查询（每次查询都是一次 D1 往返）。
+    const agg = await ctx.env.DB
+      .prepare(
+        `SELECT tonnage AS t, NULL AS p, COUNT(*) AS n, MAX(created_at) AS last
+           FROM trucks WHERE status = 'approved' GROUP BY tonnage
+         UNION ALL
+         SELECT NULL AS t, province AS p, COUNT(*) AS n, MAX(created_at) AS last
+           FROM trucks WHERE status = 'approved' AND province IS NOT NULL AND province <> '' GROUP BY province
+         UNION ALL
+         SELECT tonnage AS t, province AS p, COUNT(*) AS n, MAX(created_at) AS last
+           FROM trucks WHERE status = 'approved' AND province IS NOT NULL AND province <> ''
+          GROUP BY tonnage, province`
+      )
+      .all();
+    combos = (agg.results || []) as any[];
   } catch {
     rows = [];
+    combos = [];
   }
 
-  const urls = rows
-    .map((r) => {
-      // created_at 形如 "2026-09-20 13:39:46"，截出日期部分即可
-      const date = String(r.created_at || '').slice(0, 10);
-      const lastmod = /^\d{4}-\d{2}-\d{2}$/.test(date) ? `\n    <lastmod>${date}</lastmod>` : '';
-      return `  <url>
+  const urls: string[] = [];
+
+  // ① 详情页
+  for (const r of rows) {
+    const date = String(r.created_at || '').slice(0, 10);
+    const lastmod = /^\d{4}-\d{2}-\d{2}$/.test(date) ? `\n    <lastmod>${date}</lastmod>` : '';
+    urls.push(`  <url>
     <loc>${xmlEsc(`${SITE_URL}/trucks/${r.id}/`)}</loc>${lastmod}
     <changefreq>weekly</changefreq>
     <priority>0.8</priority>
-  </url>`;
-    })
-    .join('\n');
+  </url>`);
+  }
+
+  // ② 筛选组合页（只收有车的）
+  for (const c of combos) {
+    if (!c || !c.n) continue;
+    const segs = [c.t ? `${c.t}吨` : '', c.p || ''].filter(Boolean);
+    if (!segs.length) continue;
+    const date = String(c.last || '').slice(0, 10);
+    const lastmod = /^\d{4}-\d{2}-\d{2}$/.test(date) ? `\n    <lastmod>${date}</lastmod>` : '';
+    // 组合页权重低于单品页：它是聚合入口，不是成交页
+    const priority = segs.length === 2 ? '0.6' : '0.7';
+    urls.push(`  <url>
+    <loc>${xmlEsc(`${SITE_URL}/trucks/${segs.join('/')}/`)}</loc>${lastmod}
+    <changefreq>daily</changefreq>
+    <priority>${priority}</priority>
+  </url>`);
+  }
 
   const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-${urls}
+${urls.join('\n')}
 </urlset>
 `;
 

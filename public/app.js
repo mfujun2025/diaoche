@@ -61,6 +61,19 @@
     return o;
   }
 
+  /** 从元素的 data-query 里读出服务端写好的筛选条件
+   *  长尾路径页（/trucks/25吨/江苏/）的筛选条件在路径里，不在查询串里，
+   *  所以由服务端把结果写进 data-query，前端照着查一次库。 */
+  function parseDataQuery(el) {
+    const raw = el.dataset.query || '';
+    if (!raw) return {};
+    const o = {};
+    new URLSearchParams(raw).forEach((v, k) => {
+      if (v) o[k] = v;
+    });
+    return o;
+  }
+
   async function loadTrucks(el, params) {
     if (!el) return;
     const limit = el.dataset.limit || '20';
@@ -81,17 +94,27 @@
     }
   }
 
-  // 首页搜索
+  // 首页搜索：跳「静态路径页」而不是参数页。
+  // 原因：路径页是可收录的规范页（/trucks/25吨/江苏/），参数页已被 robots 屏蔽，
+  // 把用户与爬虫都往路径页引，权重才集中。
   window.goSearch = function (ev) {
     ev.preventDefault();
-    const p = new URLSearchParams();
     const t = document.getElementById('s-tonnage').value;
     const b = document.getElementById('s-brand').value;
     const pr = document.getElementById('s-province').value;
-    if (t) p.set('tonnage', t);
-    if (b) p.set('brand', b);
-    if (pr) p.set('province', pr);
-    location.href = '/trucks/' + (p.toString() ? '?' + p.toString() : '');
+
+    const segs = [];
+    if (t) segs.push(t + '吨');
+    if (pr) segs.push(pr);
+    if (b) segs.push(b);
+
+    if (segs.length) {
+      location.href = '/trucks/' + segs.map(encodeURIComponent).join('/') + '/';
+      return false;
+    }
+
+    // 什么都不选 → 直接回车源大厅
+    location.href = '/trucks/';
     return false;
   };
 
@@ -459,9 +482,11 @@
   document.addEventListener('DOMContentLoaded', () => {
     const list = document.getElementById('truck-list');
     if (list) {
-      const params = { ...parseQuery() };
-      // 大厅页默认 biz=sale
-      if (!params.biz_type && !list.dataset.biz && list.dataset.limit === '20') params.biz_type = 'sale';
+      // 优先级：URL 查询串（用户点筛选） > data-query（长尾路径页的服务端条件）
+      const params = { ...parseDataQuery(list), ...parseQuery() };
+      // 大厅页默认 biz=sale（长尾页不设默认，避免把出租/求购车源滤掉）
+      if (!params.biz_type && !list.dataset.biz && list.dataset.limit === '20' && !list.dataset.query)
+        params.biz_type = 'sale';
       loadTrucks(list, params);
     }
     const detail = document.getElementById('truck-detail');

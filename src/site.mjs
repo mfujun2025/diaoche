@@ -38,7 +38,7 @@ const homeBody = `
       <button type="submit">查找车源</button>
     </form>
     <div class="quick">
-      ${TONNAGES.slice(0, 6).map((t) => `<a href="/trucks/?tonnage=${t}">${t}吨吊车</a>`).join('')}
+      ${TONNAGES.slice(0, 6).map((t) => `<a href="/trucks/${t}吨/">${t}吨吊车</a>`).join('')}
       <a href="/rent/" class="hl">吊车出租频道 →</a>
     </div>
   </div>
@@ -54,7 +54,18 @@ const homeBody = `
 
 <section class="wrap sec">
   <h2 class="h2">按吨位找车</h2>
-  <div class="chips">${TONNAGES.map((t) => `<a class="chip" href="/trucks/?tonnage=${t}">${t} 吨<span>查看车源</span></a>`).join('')}</div>
+  <div class="chips">${TONNAGES.map((t) => `<a class="chip" href="/trucks/${t}吨/">${t} 吨<span>查看车源</span></a>`).join('')}</div>
+</section>
+
+<section class="wrap sec">
+  <h2 class="h2">按地区找车</h2>
+  <p class="lead">二手吊车跨省价差明显，先按地区缩小范围，再比吨位与车况。</p>
+  <div class="chips">${PROVINCES.map((p) => `<a class="chip" href="/trucks/${esc(p)}/">${esc(p)}<span>查看车源</span></a>`).join('')}</div>
+</section>
+
+<section class="wrap sec">
+  <h2 class="h2">按品牌找车</h2>
+  <div class="chips">${BRANDS.map((b) => `<a class="chip" href="/trucks/${esc(b)}/">${esc(b)}<span>查看车源</span></a>`).join('')}</div>
 </section>
 
 <section class="wrap sec">
@@ -87,6 +98,19 @@ const trucksBody = `
     <button type="submit">筛选</button>
   </form>
   <div id="truck-list" class="list" data-limit="20"></div>
+
+  <div class="d-block">
+    <h2>按吨位浏览</h2>
+    <div class="chips">${TONNAGES.map((t) => `<a class="chip" href="/trucks/${t}吨/">${t} 吨<span>查看车源</span></a>`).join('')}</div>
+  </div>
+  <div class="d-block">
+    <h2>按地区浏览</h2>
+    <div class="chips">${PROVINCES.map((p) => `<a class="chip" href="/trucks/${esc(p)}/">${esc(p)}<span>查看车源</span></a>`).join('')}</div>
+  </div>
+  <div class="d-block">
+    <h2>按品牌浏览</h2>
+    <div class="chips">${BRANDS.map((b) => `<a class="chip" href="/trucks/${esc(b)}/">${esc(b)}<span>查看车源</span></a>`).join('')}</div>
+  </div>
 </section>
 `;
 

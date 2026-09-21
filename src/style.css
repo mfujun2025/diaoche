@@ -122,6 +122,12 @@ p{margin:0 0 1em}
 .art p{margin:0;color:var(--fg2)}
 .notice{margin:24px 0;padding:16px 18px;background:var(--bg2);border-left:3px solid var(--brand);border-radius:0 var(--radius) var(--radius) 0;font-size:14px;color:var(--fg2)}
 
+/* 面包屑（长尾筛选页 / 详情页共用） */
+.crumb{font-size:13.5px;color:var(--fg2);margin:0 0 14px}
+.crumb a{color:var(--fg2)}
+.crumb a:hover{color:var(--brand)}
+.crumb span{margin:0 3px}
+
 /* cta */
 .cta{background:var(--bg2);border-top:1px solid var(--line);margin-top:20px}
 .cta-in{display:flex;align-items:center;justify-content:space-between;gap:24px;padding:40px 20px;flex-wrap:wrap}
