@@ -3,6 +3,11 @@ export const SITE = {
   name: '吊车.cn',
   url: 'https://xn--bqr649k.cn', // 吊车.cn 的 punycode 形式（已本机换算核对）
   desc: '二手吊车转让信息平台，覆盖各吨位吊车买卖、出租行情与过户避坑指南',
+  slogan: '全国二手吊车转让信息平台',
+  // 分享图（微信/QQ/微博/推特卡片）。绝对 URL —— 抓取器不解析相对路径
+  ogImage: 'https://xn--bqr649k.cn/og.png',
+  ogImageWidth: 1200,
+  ogImageHeight: 630,
 };
 
 /* 免责声明：全站统一文案，避免多处各写一份导致口径不一致。
@@ -21,6 +26,31 @@ export const DISCLAIMER_FULL = [
 const TONNAGES = [8, 12, 16, 20, 25, 35, 50, 80, 100];
 const BRANDS = ['徐工', '三一', '中联', '柳工'];
 const PROVINCES = ['上海', '江苏', '浙江', '山东', '河南', '广东', '河北', '安徽'];
+
+/* 各吨位二手吊车常见成交价区间。
+   页面表格与结构化数据（FAQPage）共用这一份，避免两处各写一份走偏。
+   ⚠️ 合规红线：这里是「区间参考」，不是承诺成交价，也不编造具体成交记录。 */
+export const PRICE_ROWS = [
+  [8, '5~10 年', '4 ~ 12', '小型车，需求稳定，适合市政与小型工地'],
+  [12, '5~10 年', '6 ~ 18', '通用性较好，二手流通量最大'],
+  [16, '5~10 年', '9 ~ 25', '城区作业常见吨位'],
+  [25, '4~9 年', '14 ~ 42', '主力吨位，成交量集中'],
+  [35, '4~9 年', '20 ~ 58', '中大型项目常用'],
+  [50, '4~8 年', '32 ~ 90', '对车况与工时敏感度高'],
+  [80, '3~8 年', '55 ~ 160', '设备商与大型租赁公司为主'],
+  [100, '3~7 年', '80 ~ 260', '单价高，务必做第三方检测'],
+];
+
+/* 避坑指南条目。同样的理由：页面与结构化数据共用一份。
+   这几条本身也是高价值问答，适合做 FAQPage 让搜索引擎展示问答摘要。 */
+export const GUIDE_ITEMS = [
+  ['一、先看权属，再看车况', '要求卖方提供行驶证、购车发票或合格证、以及是否存在抵押/融资租赁未结清的情况。权属不清的车，价格再低也不要碰。'],
+  ['二、工时表要交叉验证', '工作时间表可被调改。建议结合保养记录、液压油更换周期、支腿磨损程度做交叉判断，必要时请第三方检测。'],
+  ['三、事故车的识别要点', '重点查大臂是否有焊接修复痕迹、转台与车架连接处漆面是否异常、结构件是否有补漆色差。事故车结构强度不可逆，风险高。'],
+  ['四、过户流程与税费', '确认车辆可正常过户（部分地区对排放标准与外埠转入有限制）。过户前结清违章与税费，明确税费承担方，写入合同。'],
+  ['五、合同要写清楚', '写明月租金/转让价、进出场费、油费、超时计费、违约责任与争议解决方式。口头承诺一律无效。'],
+  ['六、付款节奏', '建议分期：定金—验车合格—过户完成—尾款。避免一次性全额支付。'],
+];
 
 const esc = (s = '') =>
   String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -177,16 +207,7 @@ const priceBody = `
     <table class="tbl">
       <thead><tr><th>吨位</th><th>常见车龄</th><th>价格区间（万元）</th><th class="col-note">说明</th></tr></thead>
       <tbody>
-        ${[
-          [8, '5~10 年', '4 ~ 12', '小型车，需求稳定，适合市政与小型工地'],
-          [12, '5~10 年', '6 ~ 18', '通用性较好，二手流通量最大'],
-          [16, '5~10 年', '9 ~ 25', '城区作业常见吨位'],
-          [25, '4~9 年', '14 ~ 42', '主力吨位，成交量集中'],
-          [35, '4~9 年', '20 ~ 58', '中大型项目常用'],
-          [50, '4~8 年', '32 ~ 90', '对车况与工时敏感度高'],
-          [80, '3~8 年', '55 ~ 160', '设备商与大型租赁公司为主'],
-          [100, '3~7 年', '80 ~ 260', '单价高，务必做第三方检测'],
-        ].map((r) => `<tr><td><strong>${r[0]} 吨</strong></td><td>${r[1]}</td><td class="em">${r[2]}</td><td class="col-note">${r[3]}</td></tr>`).join('')}
+        ${PRICE_ROWS.map((r) => `<tr><td><strong>${r[0]} 吨</strong></td><td>${r[1]}</td><td class="em">${r[2]}</td><td class="col-note">${r[3]}</td></tr>`).join('')}
       </tbody>
     </table>
   </div>
@@ -198,14 +219,7 @@ const priceBody = `
 const guideBody = `
 <section class="wrap sec first narrow">
   <h1 class="h1">二手吊车避坑指南</h1>
-  ${[
-    ['一、先看权属，再看车况', '要求卖方提供行驶证、购车发票或合格证、以及是否存在抵押/融资租赁未结清的情况。权属不清的车，价格再低也不要碰。'],
-    ['二、工时表要交叉验证', '工作时间表可被调改。建议结合保养记录、液压油更换周期、支腿磨损程度做交叉判断，必要时请第三方检测。'],
-    ['三、事故车的识别要点', '重点查大臂是否有焊接修复痕迹、转台与车架连接处漆面是否异常、结构件是否有补漆色差。事故车结构强度不可逆，风险高。'],
-    ['四、过户流程与税费', '确认车辆可正常过户（部分地区对排放标准与外埠转入有限制）。过户前结清违章与税费，明确税费承担方，写入合同。'],
-    ['五、合同要写清楚', '写明月租金/转让价、进出场费、油费、超时计费、违约责任与争议解决方式。口头承诺一律无效。'],
-    ['六、付款节奏', '建议分期：定金—验车合格—过户完成—尾款。避免一次性全额支付。'],
-  ].map((x) => `<article class="art"><h2>${x[0]}</h2><p>${x[1]}</p></article>`).join('')}
+  ${GUIDE_ITEMS.map((x) => `<article class="art"><h2>${x[0]}</h2><p>${x[1]}</p></article>`).join('')}
 </section>
 `;
 
@@ -242,12 +256,253 @@ const adminBody = `
 </section>
 `;
 
+/* ───────── 结构化数据（JSON-LD） ─────────
+   放在 src 而不是 build.mjs：内容与页面是一体的，改文案时要一起看。
+   build.mjs 只负责序列化进 <head>。
+
+   设计取舍：用 @graph 把多个实体放进一个 script 标签，而不是拆成多个 ——
+   减少 head 体积、也方便搜索引擎整体理解站点的实体关系。 */
+
+/** 站点主体。Organization 是「谁在运营这个站」，全站只声明一次。 */
+const ORG_NODE = {
+  '@type': 'Organization',
+  '@id': `${SITE.url}/#organization`,
+  name: SITE.name,
+  url: SITE.url,
+  logo: {
+    '@type': 'ImageObject',
+    url: `${SITE.url}/og.png`,
+    width: SITE.ogImageWidth,
+    height: SITE.ogImageHeight,
+  },
+  description: SITE.desc,
+};
+
+/** 站点本体 + 站内搜索。SearchAction 指向车源大厅，参数名与前端实际用的一致。 */
+const WEBSITE_NODE = {
+  '@type': 'WebSite',
+  '@id': `${SITE.url}/#website`,
+  name: SITE.name,
+  alternateName: '吊车网 · 二手吊车转让',
+  url: SITE.url,
+  description: SITE.desc,
+  publisher: { '@id': `${SITE.url}/#organization` },
+  inLanguage: 'zh-CN',
+  potentialAction: {
+    '@type': 'SearchAction',
+    // 前端首页搜索跳转的是 /trucks/<吨位>/<地区>/<品牌>/ 路径形式，
+    // 但参数形式 /trucks/?tonnage={x} 同样可用且更适合声明，这里用后者。
+    target: {
+      '@type': 'EntryPoint',
+      urlTemplate: `${SITE.url}/trucks/?tonnage={search_term_string}`,
+    },
+    'query-input': 'required name=search_term_string',
+  },
+};
+
+/** 首页：站点主体 + 站点 + 一组长尾入口。
+    长尾入口用 ItemList 声明，等于把「站内有哪些可浏览的分类」直接告诉搜索引擎，
+    比只靠内链爬取更明确。 */
+function homeLd() {
+  return {
+    '@context': 'https://schema.org',
+    '@graph': [
+      ORG_NODE,
+      WEBSITE_NODE,
+      {
+        '@type': 'ItemList',
+        name: '按吨位浏览二手吊车车源',
+        itemListElement: TONNAGES.map((t, i) => ({
+          '@type': 'ListItem',
+          position: i + 1,
+          name: `${t}吨二手吊车`,
+          url: `${SITE.url}/trucks/${t}吨/`,
+        })),
+      },
+      {
+        '@type': 'ItemList',
+        name: '按地区浏览二手吊车车源',
+        itemListElement: PROVINCES.map((p, i) => ({
+          '@type': 'ListItem',
+          position: i + 1,
+          name: `${p}二手吊车`,
+          url: `${SITE.url}/trucks/${p}/`,
+        })),
+      },
+    ],
+  };
+}
+
+/** 车源大厅：聚合列表页。与长尾页保持同一套语义（CollectionPage + ItemList）。 */
+function trucksLd() {
+  return {
+    '@context': 'https://schema.org',
+    '@graph': [
+      {
+        '@type': 'CollectionPage',
+        name: '车源大厅 — 二手吊车转让',
+        description: '按吨位、品牌、地区筛选全国二手吊车转让车源，信息经人工审核后展示。',
+        url: `${SITE.url}/trucks/`,
+        isPartOf: { '@id': `${SITE.url}/#website` },
+        inLanguage: 'zh-CN',
+      },
+      /* CollectionPage 只说明「这是一页列表」，真正告诉搜索引擎「列表里有什么」
+         的是 ItemList。缺了它，数据里最关键的一层就丢了 —— 别省。 */
+      {
+        '@type': 'ItemList',
+        name: '二手吊车车源入口',
+        itemListElement: [
+          ...TONNAGES.map((t, i) => ({
+            '@type': 'ListItem',
+            position: i + 1,
+            name: `${t}吨二手吊车`,
+            url: `${SITE.url}/trucks/${t}吨/`,
+          })),
+          ...PROVINCES.map((p, i) => ({
+            '@type': 'ListItem',
+            position: TONNAGES.length + i + 1,
+            name: `${p}二手吊车`,
+            url: `${SITE.url}/trucks/${p}/`,
+          })),
+        ],
+      },
+      ORG_NODE,
+    ],
+  };
+}
+
+/** 行情价格页：各吨位成交价区间做成 FAQ，争取搜索引擎的问答摘要位。
+    ⚠️ 合规红线：一律用「区间参考」「因车况浮动」这类表述，不承诺价格、不编造成交。 */
+function priceLd() {
+  return {
+    '@context': 'https://schema.org',
+    '@graph': [
+      {
+        '@type': 'FAQPage',
+        name: '二手吊车各吨位价格区间',
+        url: `${SITE.url}/price/`,
+        mainEntity: PRICE_ROWS.map((r) => ({
+          '@type': 'Question',
+          name: `${r[0]}吨二手吊车大概多少钱？`,
+          acceptedAnswer: {
+            '@type': 'Answer',
+            text:
+              `${r[0]}吨二手吊车常见车龄 ${r[1]} 时，价格区间参考为 ${r[2]} 万元。` +
+              `${r[3]}。实际成交受品牌、配置、工时、地区与市场周期影响，务必以实车验车结论为准。`,
+          },
+        })),
+      },
+      ORG_NODE,
+    ],
+  };
+}
+
+/** 避坑指南：六条实操要点做成 FAQ，这类问答在搜索结果里容易拿到摘要位。 */
+function guideLd() {
+  return {
+    '@context': 'https://schema.org',
+    '@graph': [
+      {
+        '@type': 'FAQPage',
+        name: '二手吊车交易避坑要点',
+        url: `${SITE.url}/guide/`,
+        mainEntity: GUIDE_ITEMS.map((x) => ({
+          '@type': 'Question',
+          name: String(x[0]).replace(/^[一二三四五六七八九十]+、/, ''),
+          acceptedAnswer: { '@type': 'Answer', text: x[1] },
+        })),
+      },
+      ORG_NODE,
+    ],
+  };
+}
+
+/** 出租频道：服务型页面，用 Service 描述比 CollectionPage 更贴切。 */
+function rentLd() {
+  return {
+    '@context': 'https://schema.org',
+    '@graph': [
+      {
+        '@type': 'Service',
+        name: '吊车出租信息查询',
+        serviceType: '吊车租赁信息发布与查询',
+        description: '按省市查找吊车出租信息与台班价参考。本站仅收集与展示出租信息，不承担调度与履约。',
+        url: `${SITE.url}/rent/`,
+        areaServed: PROVINCES.map((p) => ({ '@type': 'AdministrativeArea', name: p })),
+        provider: { '@id': `${SITE.url}/#organization` },
+      },
+      ORG_NODE,
+    ],
+  };
+}
+
+/** 我要卖车：发布入口，用 WebPage + 明确的用途说明（Google 对表单页有单独的引导政策）。 */
+function sellLd() {
+  return {
+    '@context': 'https://schema.org',
+    '@graph': [
+      {
+        '@type': 'WebPage',
+        name: '我要卖车 — 免费发布二手吊车车源',
+        description: '免费发布二手吊车转让、出租、求购信息，审核通过后展示在车源大厅。',
+        url: `${SITE.url}/sell/`,
+        isPartOf: { '@id': `${SITE.url}/#website` },
+        inLanguage: 'zh-CN',
+      },
+      ORG_NODE,
+    ],
+  };
+}
+
 export const pages = [
-  { path: 'index.html', title: '吊车.cn — 全国二手吊车转让信息平台', description: SITE.desc, body: homeBody },
-  { path: 'trucks/index.html', title: '车源大厅 — 二手吊车转让 | 吊车.cn', description: '按吨位、品牌、地区筛选全国二手吊车转让车源，信息经人工审核后展示。', body: trucksBody },
-  { path: 'sell/index.html', title: '我要卖车 — 免费发布车源 | 吊车.cn', description: '免费发布二手吊车转让、出租、求购信息，审核通过后展示在车源大厅。', body: sellBody },
-  { path: 'rent/index.html', title: '吊车出租 — 按城市查找 | 吊车.cn', description: '按省市查找吊车出租信息与台班价参考。', body: rentBody },
-  { path: 'price/index.html', title: '吊车行情价格库 — 各吨位二手成交价参考 | 吊车.cn', description: '8~100 吨二手吊车成交价区间参考，月度更新。', body: priceBody },
-  { path: 'guide/index.html', title: '二手吊车避坑指南 | 吊车.cn', description: '权属核验、工时表交叉验证、事故车识别、过户流程与合同要点。', body: guideBody },
+  {
+    path: 'index.html',
+    title: '吊车.cn — 全国二手吊车转让信息平台',
+    description: SITE.desc,
+    // 分享文案与 meta description 分开写：前者要像一句话推荐，后者要有搜索词
+    ogDesc: '按吨位、品牌、地区快速找车。车源由车主与设备商直发，平台不参与交易，只做信息撮合。',
+    ld: homeLd,
+    body: homeBody,
+  },
+  {
+    path: 'trucks/index.html',
+    title: '车源大厅 — 二手吊车转让 | 吊车.cn',
+    description: '按吨位、品牌、地区筛选全国二手吊车转让车源，信息经人工审核后展示。',
+    ogDesc: '全国二手吊车转让车源，按吨位、地区、品牌筛选，人工审核后展示。',
+    ld: trucksLd,
+    body: trucksBody,
+  },
+  {
+    path: 'sell/index.html',
+    title: '我要卖车 — 免费发布车源 | 吊车.cn',
+    description: '免费发布二手吊车转让、出租、求购信息，审核通过后展示在车源大厅。',
+    ogDesc: '免费发布二手吊车转让、出租、求购信息，审核通过后展示在车源大厅。',
+    ld: sellLd,
+    body: sellBody,
+  },
+  {
+    path: 'rent/index.html',
+    title: '吊车出租 — 按城市查找 | 吊车.cn',
+    description: '按省市查找吊车出租信息与台班价参考。',
+    ogDesc: '按省市查找吊车出租信息与台班价参考，覆盖全国主要工程机械活跃省份。',
+    ld: rentLd,
+    body: rentBody,
+  },
+  {
+    path: 'price/index.html',
+    title: '吊车行情价格库 — 各吨位二手成交价参考 | 吊车.cn',
+    description: '8~100 吨二手吊车成交价区间参考，月度更新。',
+    ogDesc: '8~100 吨二手吊车成交价区间参考。数据为公开信息整理，随市场波动。',
+    ld: priceLd,
+    body: priceBody,
+  },
+  {
+    path: 'guide/index.html',
+    title: '二手吊车避坑指南 | 吊车.cn',
+    description: '权属核验、工时表交叉验证、事故车识别、过户流程与合同要点。',
+    ogDesc: '权属核验、工时表交叉验证、事故车识别、过户流程与合同要点，签合同前先看这篇。',
+    ld: guideLd,
+    body: guideBody,
+  },
   { path: 'admin/index.html', title: '内容审核后台 | 吊车.cn', description: '', body: adminBody, layout: 'admin' },
 ];

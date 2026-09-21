@@ -164,6 +164,13 @@ await rm(DIST, { recursive: true, force: true });
 await mkdir(DIST, { recursive: true });
 const css = await readCss();
 
+/* favicon 三件套：SVG（现代浏览器，矢量清晰）+ ICO（老浏览器/采集器）+ apple-touch-icon。
+   ⚠️ 必须声明在这里（render 调用之前）—— `const` 有 TDZ，声明在使用之后会直接报
+   "Cannot access 'FAVICON' before initialization"。 */
+const FAVICON = `<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/favicon.ico" sizes="any">
+<link rel="apple-touch-icon" href="/og.png">`;
+
 let count = 0;
 for (const page of pages) {
   const outPath = path.join(DIST, page.path);
@@ -287,9 +294,52 @@ function esc(s = '') {
   return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
+/** 序列化 JSON-LD。
+ *  必须转义 `<` —— 正文里若出现 `</script>` 会提前闭合标签，页面直接崩。
+ *  顺手把 `&` 和 U+2028/U+2029 也转掉：前者在部分解析器里有坑，
+ *  后者是 JS 的行分隔符，虽在 JSON 里合法但历史上引发过解析问题。 */
+function jsonLd(node) {
+  return JSON.stringify(node)
+    .replace(/</g, '\\u003c')
+    .replace(/>/g, '\\u003e')
+    .replace(/&/g, '\\u0026')
+    .replace(/\u2028/g, '\\u2028')
+    .replace(/\u2029/g, '\\u2029');
+}
+
+/** 页面 URL。首页是根，其余是去 index.html 的目录形式。 */
+function pageUrl(p) {
+  return p === 'index.html' ? SITE.url + '/' : `${SITE.url}/${p.replace(/index\.html$/, '')}`;
+}
+
+/** Open Graph + Twitter Card。
+ *  为什么两个都写：微信/QQ/微博/小红书 读 og，推特读 twitter:*。
+ *  og:image 必须是绝对 URL —— 抓取器不解析相对路径，写了相对路径等于没写。 */
+function socialMeta(page) {
+  const url = pageUrl(page.path);
+  const ogDesc = page.ogDesc || page.description || SITE.desc;
+  return `<meta property="og:type" content="website">
+<meta property="og:site_name" content="${esc(SITE.name)}">
+<meta property="og:locale" content="zh_CN">
+<meta property="og:title" content="${esc(page.title)}">
+<meta property="og:description" content="${esc(ogDesc)}">
+<meta property="og:url" content="${esc(url)}">
+<meta property="og:image" content="${esc(SITE.ogImage)}">
+<meta property="og:image:width" content="${SITE.ogImageWidth}">
+<meta property="og:image:height" content="${SITE.ogImageHeight}">
+<meta property="og:image:alt" content="${esc(SITE.slogan)}">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="${esc(page.title)}">
+<meta name="twitter:description" content="${esc(ogDesc)}">
+<meta name="twitter:image" content="${esc(SITE.ogImage)}">`;
+}
+
 function render(page, css) {
-  const { title, description, body, path: p } = page;
-  const full = p === 'index.html' ? SITE.url : `${SITE.url}/${p}`;
+  const { title, description, body, path: p, ld } = page;
+  const full = pageUrl(p);
+  // 只有声明了 ld 的页面才输出结构化数据（admin 是无）
+  const ldScript =
+    typeof ld === 'function' ? `\n<script type="application/ld+json">${jsonLd(ld())}</script>` : '';
   return `<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -298,6 +348,8 @@ function render(page, css) {
 <title>${esc(title)}</title>
 <meta name="description" content="${esc(description)}">
 <link rel="canonical" href="${esc(full)}">
+${socialMeta(page)}
+${FAVICON}${ldScript}
 <style>${css}</style>
 </head>
 <body>
@@ -326,7 +378,9 @@ function render(page, css) {
 </html>`;
 }
 
-// 后台页：独立模板，不进 SEO（noindex），加载 admin.js
+// 后台页：独立模板，不进 SEO（noindex），加载 admin.js。
+// 刻意不加 og / twitter / JSON-LD —— 后台没有分享与收录价值，
+// 加了反而会把后台标题泄漏到分享卡片里。
 function renderAdmin(page, css) {
   const { title, body } = page;
   return `<!DOCTYPE html>
@@ -336,6 +390,7 @@ function renderAdmin(page, css) {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${esc(title)}</title>
 <meta name="robots" content="noindex,nofollow">
+${FAVICON}
 <style>${css}${ADMIN_CSS}</style>
 </head>
 <body class="admin">
