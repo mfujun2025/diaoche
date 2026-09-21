@@ -1,6 +1,6 @@
 # 交付概述：邮箱验证码登录（替换「功能开发中」占位）
 
-**状态**：✅ 代码已上线（提交 `b676be2` + `7acdfbd`）· ⚠️ **远程 D1 建表由 CI 自动完成**
+**状态**：✅ 代码已上线 · ✅ 完整登录链路已线上验证通过（35 项全绿）· ⚠️ 待你配 Resend 才能真正发信
 
 ---
 
@@ -189,11 +189,28 @@ functions/api/auth/*.ts        四个接口，只做「解析请求 → 调上�
 并发注册（`INSERT OR IGNORE` 不抛异常）、多设备并存、
 过期清理、封禁用户、退出只删当前设备、限流 COUNT 查询、**车源表回归**。
 
-### ③ 线上端到端 —— `scripts/cdp-auth.mjs` · 20 项通过
+### ③ 线上端到端 —— `scripts/cdp-auth.mjs` · **35 项全绿**
 
-真浏览器跑，覆盖前两层测不到的：**Cookie 能否被浏览器真正保存并带上**、
-**HttpOnly 是否真的生效**（`document.cookie` 里应看不到）、
-登录后自动重试链路、前端交互、伪造 token 被拒、退出后重新被拦。
+真浏览器跑，8 组：前置接口探测 / 详情页门禁 / 前端表单交互 / 未登录 401 /
+`me` 匿名 false / 伪造 token 被拒 / **完整登录流程** / **界面端到端 + 退出**。
+
+覆盖前两层测不到的（只能靠真浏览器验）：
+
+- **Cookie 能否被浏览器真正保存并带上**
+- **HttpOnly 是否真的生效**（`document.cookie` 里应看不到会话）
+- **登录成功后界面自动重试** —— 点按钮 → 显示登录框 → 登录 → **不用再点一次**
+  就显示了联系方式
+- 退出后重新被拦
+
+> **完整链路已验证的路径**：发码 → 拿到码 → 登录 200 → `me` 返回 true →
+> 取联系方式 200 且非空 → 详情页界面自动显示 → 退出 → `me` 变 false →
+> 联系方式重新 401。
+
+⚠️ **调试提示**：发码接口有「IP 每小时 5 次」限流，连着调两轮就会撞 429
+（这是**功能正确**的表现）。脚本支持注入已知验证码绕开：
+```
+AUTH_TEST_EMAIL=xxx AUTH_TEST_CODE=123456 node scripts/cdp-auth.mjs
+```
 
 ---
 
@@ -233,23 +250,29 @@ d1 execute diaoche-db --file=./schema.sql --remote
 
 ## 你需要做的（3 步）
 
-1. **确认 CI 跑过建表**（提交 `7acdfbd` 的 workflow run 里的
-   `Apply D1 schema (idempotent)` 步骤应该是绿的）。
-   若想手动执行：
-   ```
-   npx wrangler d1 execute diaoche-db --file=./schema.sql --remote
-   ```
+### ① ⚠️ 先删掉临时调试开关 `DC_MAIL_DEV_MODE`
 
-2. **注册 Resend 并配两个环境变量**（Cloudflare Pages → Settings → Variables and Secrets）：
-   - `DC_RESEND_KEY` = 你的 Resend API Key
-   - `DC_MAIL_FROM` = 验证过 DNS 的发件地址
-   - 建议再加 `DC_AUTH_SALT` = 一串随机值
-   ```
-   node -e "console.log(require('crypto').randomBytes(24).toString('base64url'))"
-   ```
-   配完 **Retry deployment** 一次。
+验证时临时加过这个变量（`=1`）。**现在必须删** —— 它会把验证码直接放进接口响应，
+等于谁都能登进来。删掉后 **Retry deployment** 一次。
 
-3. **等 Resend 域名验证通过后**，用真实邮箱在详情页走一遍完整流程。
+### ② 注册 Resend 并配三个环境变量
 
-> 在 2 完成前，`send-code` 接口会返回成功但不真发邮件（开发模式），
-> 用户永远收不到码。所以配 Resend 是让登录真正可用的**必要一步**。
+Cloudflare Pages → Settings → Variables and Secrets：
+- `DC_RESEND_KEY` = 你的 Resend API Key（`re_` 开头）
+- `DC_MAIL_FROM` = 验证过 DNS 的发件地址
+- 建议再加 `DC_AUTH_SALT` = 一串随机值
+  ```
+  node -e "console.log(require('crypto').randomBytes(24).toString('base64url'))"
+  ```
+  ⚠️ **`DC_AUTH_SALT` 填了之后就不要再改** —— 改了所有 `email_hash` 全变，
+  老用户会全部「变成新用户」。
+
+配完 **Retry deployment** 一次。
+
+### ③ 用真实邮箱走一遍
+
+等 Resend 域名验证通过后，用你真实的邮箱在详情页点「查看联系方式」走完整流程。
+
+> 在 ② 完成前，`send-code` 会返回成功但不真发邮件，用户永远收不到码。
+> 所以配 Resend 是让登录真正可用的**必要一步**。
+
