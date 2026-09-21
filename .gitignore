@@ -7,3 +7,6 @@ dist/
 
 # 本地无头浏览器验证的临时产物（截图、Edge profile）
 .shots/
+
+# 提交信息临时文件（git commit -F 用，避免 bash heredoc 在本机 Git Bash 下取不到路径）
+commit-msg.tmp
