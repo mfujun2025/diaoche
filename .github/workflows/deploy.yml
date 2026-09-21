@@ -61,3 +61,15 @@ jobs:
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           packageManager: npm
           command: pages deploy dist --project-name=diaoche-cn
+
+      # ★ 部署后体检：确认关键环境变量在「运行中的部署」里真的生效。
+      #   为什么必须有这一步：本项目用 wrangler 直传部署（Direct Upload），
+      #   而 Direct Upload **不携带项目级环境变量** —— 变量只能在控制台配、
+      #   且必须重新部署才生效。历史上踩过坑：DC_ADMIN_KEY 变空导致整个后台
+      #   401，但 CI 全绿、没人发现，是老孟自己发现后台进不去才暴露的。
+      #   给 CDN 一点时间让新部署生效。
+      - name: Wait for deployment to propagate
+        run: sleep 20
+
+      - name: Post-deploy health check
+        run: node scripts/check-env.mjs
