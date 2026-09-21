@@ -1,8 +1,8 @@
-// 后台审核页交互（令牌登录保护）
+// 后台审核页交互（访问密钥登录保护）
 (function () {
   'use strict';
 
-  const TOKEN_KEY = 'dc_admin_token';
+  const KEY_STORE = 'dc_admin_key';
 
   const esc = (s) =>
     String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -12,15 +12,15 @@
 
   let currentStatus = 'pending';
 
-  const getToken = () => localStorage.getItem(TOKEN_KEY) || '';
-  const setToken = (t) => localStorage.setItem(TOKEN_KEY, t);
-  const clearToken = () => localStorage.removeItem(TOKEN_KEY);
+  const getKey = () => localStorage.getItem(KEY_STORE) || '';
+  const setKey = (t) => localStorage.setItem(KEY_STORE, t);
+  const clearKey = () => localStorage.removeItem(KEY_STORE);
 
-  /** 带令牌的请求封装 */
+  /** 带密钥的请求封装 */
   function api(path, init) {
     const opts = Object.assign({}, init);
     opts.headers = Object.assign(
-      { 'X-Admin-Token': getToken(), Accept: 'application/json' },
+      { 'X-Admin-Key': getKey(), Accept: 'application/json' },
       (init && init.headers) || {}
     );
     return fetch(path, opts);
@@ -83,9 +83,9 @@
       const res = await api(`/api/admin/list?status=${encodeURIComponent(currentStatus)}&limit=100`);
 
       if (res.status === 401) {
-        // 令牌失效（被改过或清空），退回登录态
-        clearToken();
-        showLogin('登录状态已失效，请重新输入访问令牌。');
+        // 密钥失效（被改过或清空），退回登录态
+        clearKey();
+        showLogin('登录状态已失效，请重新输入访问密钥。');
         return;
       }
 
@@ -112,11 +112,11 @@
     }
   }
 
-  /** 校验令牌是否可用，可用则进主界面 */
-  async function tryToken(token) {
+  /** 校验密钥是否可用，可用则进主界面 */
+  async function tryKey(key) {
     const res = await fetch('/api/admin/login', {
       method: 'POST',
-      headers: { 'X-Admin-Token': token, Accept: 'application/json' },
+      headers: { 'X-Admin-Key': key, Accept: 'application/json' },
     });
     if (res.ok) return { ok: true };
     let msg = '登录失败';
@@ -137,19 +137,19 @@
     // 登录表单
     document.getElementById('admin-login-form').addEventListener('submit', async (ev) => {
       ev.preventDefault();
-      const input = document.getElementById('admin-token');
+      const input = document.getElementById('admin-key');
       const btn = ev.target.querySelector('button');
-      const token = input.value.trim();
-      if (!token) return;
+      const key = input.value.trim();
+      if (!key) return;
 
       btn.disabled = true;
       btn.textContent = '验证中…';
-      const r = await tryToken(token);
+      const r = await tryKey(key);
       btn.disabled = false;
       btn.textContent = '登录';
 
       if (r.ok) {
-        setToken(token);
+        setKey(key);
         input.value = '';
         showMain();
         load('pending');
@@ -161,7 +161,7 @@
     // 退出
     document.getElementById('admin-logout').addEventListener('click', (ev) => {
       ev.preventDefault();
-      clearToken();
+      clearKey();
       showLogin('已退出登录。');
     });
 
@@ -186,8 +186,8 @@
         });
 
         if (res.status === 401) {
-          clearToken();
-          showLogin('登录状态已失效，请重新输入访问令牌。');
+          clearKey();
+          showLogin('登录状态已失效，请重新输入访问密钥。');
           return;
         }
 
@@ -210,8 +210,8 @@
       }
     });
 
-    // 启动：有令牌就直接进，否则显示登录框
-    if (getToken()) {
+    // 启动：有密钥就直接进，否则显示登录框
+    if (getKey()) {
       showMain();
       load('pending');
     } else {

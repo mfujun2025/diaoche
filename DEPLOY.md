@@ -148,11 +148,11 @@ Pages 项目 → **Custom domains → Set up a domain**
 同时绑定 `www`：
 - 加 `www.xn--bqr649k.cn`，或在 Cloudflare 用 Redirect Rule 把 www 301 到裸域
 
-### 3.6 保护后台：访问令牌（`ADMIN_TOKEN`）
+### 3.6 保护后台：访问密钥（`DC_ADMIN_KEY`）
 
 后台地址：`https://xn--bqr649k.cn/admin/`
 
-**方案：应用层令牌登录。** 打开后台会先看到登录框，输入 `ADMIN_TOKEN` 才进得去；令牌存在浏览器 localStorage，所有 admin 接口请求带 `X-Admin-Token` 头，服务端用**恒定时间比较**校验。
+**方案：应用层密钥登录。** 打开后台会先看到登录框，输入 `DC_ADMIN_KEY` 才进得去；密钥存在浏览器 localStorage，所有 admin 接口请求带 `X-Admin-Key` 头，服务端用**恒定时间比较**校验。
 
 #### 为什么不用 Cloudflare Access
 
@@ -177,14 +177,14 @@ xn--bqr649k.cn/admin/        => 302 要求登录，但登录后卡在 404
 diaoche-cn.pages.dev/admin   => 正常放行（无痕窗口实测：不要求登录）
 ```
 
-**结论：Pages 自定义域名与 Access 的 `/cdn-cgi/*` 处理存在冲突，改用应用层令牌彻底绕开。**
+**结论：Pages 自定义域名与 Access 的 `/cdn-cgi/*` 处理存在冲突，改用应用层密钥彻底绕开。**
 
 > 注意：`exclude: ["/cdn-cgi/*"]` **解决不了这个问题** —— 官方文档明确 `exclude` 的语义是「该路径不调用 Functions」，
 > 之后仍回落到 Pages 静态资源，找不到文件照样 404，不会交给 CF 边缘处理。
 
 #### 配置步骤
 
-**第一步：设令牌**
+**第一步：设密钥**
 
 `wrangler.toml` 的 `[vars]`（明文，仓库可见）：
 
@@ -192,14 +192,14 @@ diaoche-cn.pages.dev/admin   => 正常放行（无痕窗口实测：不要求登
 [vars]
 ENV = "production"
 SITE_NAME = "吊车.cn"
-ADMIN_TOKEN = "你的随机令牌"
+DC_ADMIN_KEY = "你的随机密钥"
 ```
 
 **更安全的做法**是用加密 Secret（不进仓库、不可读回）：
 
 ```bash
 # 方式一：命令行
-npx wrangler pages secret put ADMIN_TOKEN --project-name diaoche-cn
+npx wrangler pages secret put DC_ADMIN_KEY --project-name diaoche-cn
 
 # 方式二：控制台
 Workers & Pages → diaoche-cn → Settings → Variables and Secrets → Add → Secret
@@ -207,7 +207,7 @@ Workers & Pages → diaoche-cn → Settings → Variables and Secrets → Add �
 
 > Secrets 优先级高于 `[vars]`，同名会覆盖。
 
-令牌建议用密码管理器生成 32 位以上随机串，例如：
+密钥建议用密码管理器生成 32 位以上随机串，例如：
 
 ```bash
 node -e "console.log(require('crypto').randomBytes(24).toString('base64url'))"
@@ -218,29 +218,29 @@ node -e "console.log(require('crypto').randomBytes(24).toString('base64url'))"
 **第三步：验证**
 
 ```bash
-# 无令牌 → 应 401
+# 无密钥 → 应 401
 curl -s -o /dev/null -w "%{http_code}\n" https://xn--bqr649k.cn/api/admin/list
 
-# 错令牌 → 应 401
+# 错密钥 → 应 401
 curl -s -o /dev/null -w "%{http_code}\n" \
-  -H "X-Admin-Token: wrong" https://xn--bqr649k.cn/api/admin/list
+  -H "X-Admin-Key: wrong" https://xn--bqr649k.cn/api/admin/list
 
-# 对令牌 → 应 200
+# 对密钥 → 应 200
 curl -s -o /dev/null -w "%{http_code}\n" \
-  -H "X-Admin-Token: 你的随机令牌" https://xn--bqr649k.cn/api/admin/list
+  -H "X-Admin-Key: 你的随机密钥" https://xn--bqr649k.cn/api/admin/list
 ```
 
-浏览器访问 `https://xn--bqr649k.cn/admin/` → 出现「后台登录」→ 输入令牌 → 进入审核界面。
+浏览器访问 `https://xn--bqr649k.cn/admin/` → 出现「后台登录」→ 输入密钥 → 进入审核界面。
 登录一次后同浏览器免登录，右上角「退出」可清除。
 
 #### 安全说明（务必知道代价）
 
 | 项 | 说明 |
 | --- | --- |
-| **fail closed** | `ADMIN_TOKEN` 未配置时，**所有 admin 接口一律拒绝**（不会裸奔）。代价：忘配则后台进不去，需重新部署 |
-| **恒定时间比较** | 防时序攻击，避免逐位比较泄露令牌内容 |
-| **无频率限制** | 目前登录接口没有失败次数限制。令牌是 32 位随机串，暴力破解不可行，但建议后续加限流 |
-| **令牌在 localStorage** | 仅防 XSS 场景足够（本站无用户输入渲染到后台页）。比 Access 弱在：没有第二因素 |
+| **fail closed** | `DC_ADMIN_KEY` 未配置时，**所有 admin 接口一律拒绝**（不会裸奔）。代价：忘配则后台进不去，需重新部署 |
+| **恒定时间比较** | 防时序攻击，避免逐位比较泄露密钥内容 |
+| **无频率限制** | 目前登录接口没有失败次数限制。密钥是 32 位随机串，暴力破解不可行，但建议后续加限流 |
+| **密钥在 localStorage** | 仅防 XSS 场景足够（本站无用户输入渲染到后台页）。比 Access 弱在：没有第二因素 |
 | **页面本身不加密** | `/admin/` 的 HTML 是公开的（登录框），真正的数据在 API 后面。这点比 Access 弱（Access 连页面都拦） |
 | **`/api/upload` 与 `/img`** | **不在保护范围**，仍无鉴权（见待办） |
 
@@ -450,13 +450,13 @@ curl -s -o /dev/null -w '%{http_code}\n' "$B/api/admin/list"
 | Actions 报 wrangler 权限不足 | Token 权限缺失 | 补 `Pages:Edit` + `D1:Edit` |
 | 车源列表一直"加载中" | `/api/trucks` 404 | 确认 `functions/api/` 目录被识别，本地用 `npm run preview` |
 | 提交后前台看不到 | 状态是 `pending` | 去 `/admin/` 审核通过 |
-| 打开 `/admin/` 只有登录框，进不去 | `ADMIN_TOKEN` 没配或输错 | 三个接口都试：无令牌/错令牌应 401，对令牌应 200。未配令牌时接口**全部拒绝**（fail closed），需在 `wrangler.toml` 或控制台 Secret 里补上再重新部署 |
-| 登录后立刻又弹回登录框 | localStorage 里的令牌失效 | 令牌被改过 → 重新输入新的。或浏览器禁用了 localStorage |
-| 忘了 `ADMIN_TOKEN` 是什么 | 明文变量可读回 | `wrangler.toml` 里能直接看到。若改用 Secret 则无法读回，只能重设 |
+| 打开 `/admin/` 只有登录框，进不去 | `DC_ADMIN_KEY` 没配或输错 | 三个接口都试：无密钥/错密钥应 401，对密钥应 200。未配密钥时接口**全部拒绝**（fail closed），需在 `wrangler.toml` 或控制台 Secret 里补上再重新部署 |
+| 登录后立刻又弹回登录框 | localStorage 里的密钥失效 | 密钥被改过 → 重新输入新的。或浏览器禁用了 localStorage |
+| 忘了 `DC_ADMIN_KEY` 是什么 | 明文变量可读回 | `wrangler.toml` 里能直接看到。若改用 Secret 则无法读回，只能重设 |
 | 控制台 Variables 全是灰的、改不了也加不了 | 环境变量由 `wrangler.toml` 托管 | 改 `wrangler.toml` 的 `[vars]`，推上去由 CI 生效。**但 Secrets 可以在控制台加**（不受此限制） |
 | **访问 `www.吊车.cn` 返回 522** | **浏览器把 `吊车.cn` 自动补成了 `www.`，而 `www` 没有 DNS 记录** | 加一条 `www` CNAME → `diaoche-cn.pages.dev`（橙云开）。访问后台请直接粘贴 punycode 地址 `https://xn--bqr649k.cn/admin/`，浏览器不会改写 punycode |
-| ~~打开 `/admin/` 直接可见，没要登录~~ | ~~Access 没配~~ | **已改用应用层令牌，此行保留仅作历史参考** |
-| ~~Access 认证后停在 404~~ | ~~Pages 自定义域名与 Access 的 `/cdn-cgi/*` 冲突~~ | **已改用应用层令牌绕开。详见 3.6** |
+| ~~打开 `/admin/` 直接可见，没要登录~~ | ~~Access 没配~~ | **已改用应用层密钥，此行保留仅作历史参考** |
+| ~~Access 认证后停在 404~~ | ~~Pages 自定义域名与 Access 的 `/cdn-cgi/*` 冲突~~ | **已改用应用层密钥绕开。详见 3.6** |
 | **`wrangler pages dev` 报 "Unknown arguments" 或读不到 wrangler.toml** | **wrangler 是 v3，不支持 `pages_build_output_dir`** | **`npm install -D wrangler@^4`** |
 | **Actions 报 "Wrangler requires at least Node.js v22.0.0"** | **workflow 里 `setup-node` 设成了 20** | **改成 `node-version: '22'`**（这是实测踩到的，v4 硬性要求 Node ≥22） |
 | Actions 报 `npx canceled due to missing packages` | workflow 缺 `npm ci` | 在 Build 之前加 `- run: npm ci` |
@@ -468,7 +468,7 @@ curl -s -o /dev/null -w '%{http_code}\n' "$B/api/admin/list"
 
 新提交的车源 `status = 'pending'`，不会出现在前台。**推荐用后台页面审核**：
 
-> 访问 `https://xn--bqr649k.cn/admin/` → 输入 `ADMIN_TOKEN` → 在待审列表点「通过 / 驳回 / 删除」即可。
+> 访问 `https://xn--bqr649k.cn/admin/` → 输入 `DC_ADMIN_KEY` → 在待审列表点「通过 / 驳回 / 删除」即可。
 
 备用方式（命令行，适合批量）：
 
@@ -502,8 +502,8 @@ npx wrangler d1 execute diaoche-db --remote \
 - [ ] Actions 首次构建成功
 - [ ] 首页 / 车源大厅 / 卖车表单三个页面可正常访问
 - [ ] 提交一条测试车源 → D1 里能查到
-- [ ] **`ADMIN_TOKEN` 已设置（`wrangler.toml` 的 `[vars]` 或控制台 Secret），访问 `/admin/` 会要求输入令牌**
-- [ ] **无令牌访问 `/api/admin/list` 返回 401**
+- [ ] **`DC_ADMIN_KEY` 已设置（`wrangler.toml` 的 `[vars]` 或控制台 Secret），访问 `/admin/` 会要求输入密钥**
+- [ ] **无密钥访问 `/api/admin/list` 返回 401**
 - [ ] 在 `/admin/` 点「通过」→ 前台车源大厅能看到该车源
 - [ ] 移动端（手机）打开首页，排版正常
 

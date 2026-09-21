@@ -1,14 +1,14 @@
 # Cloudflare 配置清单与现状
 
-> **当前状态：全部完成 ✅（方案已从 Access 改为应用层令牌，见第二节）**
-> 站点已上线 · 图片上传 + 显示全链路已打通 · 后台令牌登录已生效
+> **当前状态：全部完成 ✅（方案已从 Access 改为应用层密钥，见第二节）**
+> 站点已上线 · 图片上传 + 显示全链路已打通 · 后台密钥登录已生效
 > 线上地址：<https://xn--bqr649k.cn/>（自定义域名已生效）· <https://diaoche-cn.pages.dev/>
 > 图片地址形如：`https://xn--bqr649k.cn/img/trucks/202609/xxxxxxxx.png`
 >
 > **图片方案已于 2026-09-20 变更**：不再依赖 R2 自定义域名（CF 对中文域名有 bug），
 > 改走本站 Functions 代理 → **你不需要再做 R2 自定义域那一步了**。
 >
-> **后台防护方案已于 2026-09-21 变更**：从 Cloudflare Access 改为**应用层令牌登录**（`ADMIN_TOKEN`）。
+> **后台防护方案已于 2026-09-21 变更**：从 Cloudflare Access 改为**应用层密钥登录**（`DC_ADMIN_KEY`）。
 > 原因：Pages 自定义域名 + Access 多域名应用会导致认证回调 `/cdn-cgi/access/authorized` 返回 404，
 > 认证走完却回不来。详见第二节。
 
@@ -27,10 +27,10 @@
 | R2 绑定 | ✅ Pages 项目 production + preview 双环境 |
 | Pages 项目 | ✅ `diaoche-cn`，production branch = `main` |
 | **自定义域名** | ✅ **`xn--bqr649k.cn` 已绑定，状态 active** |
-| 环境变量 | ✅ `ENV` / `SITE_NAME` / **`ADMIN_TOKEN`** |
+| 环境变量 | ✅ `ENV` / `SITE_NAME` / **`DC_ADMIN_KEY`** |
 | CI 流水线 | ✅ 全绿，静态页 + Functions 均已发布 |
 | 图片上传功能 | ✅ 前端选图 + 后端 `/api/upload` + 卡片显示封面 |
-| **后台令牌登录** | ✅ **已生效（2026-09-21 实现并本地实测 10 项全通过）** |
+| **后台密钥登录** | ✅ **已生效（2026-09-21 实现并本地实测 10 项全通过）** |
 | ~~Access 保护后台~~ | ⚠️ **已废弃**（Pages 自定义域名冲突，见第二节） |
 | ~~`ADMIN_EMAILS` 白名单~~ | ⚠️ **已废弃**（Access 时代的产物，代码不再读取） |
 
@@ -54,21 +54,21 @@
 [vars]
 ENV = "production"
 SITE_NAME = "吊车.cn"
-ADMIN_TOKEN = "你的随机令牌"
+DC_ADMIN_KEY = "你的随机密钥"
 ```
 
 改完 commit + push，CI 部署时自动带上。
 
-> **例外：Secrets 可以在控制台改。** 如果不想让令牌明文进仓库，用控制台
+> **例外：Secrets 可以在控制台改。** 如果不想让密钥明文进仓库，用控制台
 > Settings → Variables and Secrets → Add → 选 **Secret**，或命令行
-> `npx wrangler pages secret put ADMIN_TOKEN --project-name diaoche-cn`。
+> `npx wrangler pages secret put DC_ADMIN_KEY --project-name diaoche-cn`。
 > Secret 优先级高于 `[vars]`，同名会覆盖。
 >
 > 补充：本地 `.dev.vars` 是覆盖用的（已 gitignore），改完**必须重启 wrangler**，不热重载。
 
 ---
 
-## 二、后台防护方案：应用层令牌（现行方案）
+## 二、后台防护方案：应用层密钥（现行方案）
 
 ### 为什么放弃 Cloudflare Access
 
@@ -109,43 +109,43 @@ curl -s -o /dev/null -w "%{http_code}\n" \
 官方文档明确 `exclude` 的语义是「该路径不调用 Functions」，之后**仍回落到 Pages 静态资源**，
 找不到文件照样 404，**不会交回 CF 边缘处理**。
 
-**结论**：Pages 自定义域名与 Access 的 `/cdn-cgi/*` 处理存在冲突，**改用应用层令牌彻底绕开**。
+**结论**：Pages 自定义域名与 Access 的 `/cdn-cgi/*` 处理存在冲突，**改用应用层密钥彻底绕开**。
 
-### 现行方案：`ADMIN_TOKEN` 令牌登录
+### 现行方案：`DC_ADMIN_KEY` 密钥登录
 
 **实现**：
-- `functions/api/admin/_auth.ts` —— `verifyAdmin()` 读 `X-Admin-Token`（兼容 `Authorization: Bearer`），
-  与 `env.ADMIN_TOKEN` 做**恒定时间比较**；**未配置令牌时一律拒绝**（fail closed，防忘配裸奔）
-- `functions/api/admin/login.ts` —— `POST /api/admin/login`，供前端校验令牌
-- `public/admin.js` —— 登录框 → 校验 → 存 `localStorage('dc_admin_token')` → 后续请求带令牌；带「退出」按钮
+- `functions/api/admin/_auth.ts` —— `verifyAdmin()` 读 `X-Admin-Key`（兼容 `Authorization: Bearer`），
+  与 `env.DC_ADMIN_KEY` 做**恒定时间比较**；**未配置密钥时一律拒绝**（fail closed，防忘配裸奔）
+- `functions/api/admin/login.ts` —— `POST /api/admin/login`，供前端校验密钥
+- `public/admin.js` —— 登录框 → 校验 → 存 `localStorage('dc_admin_token')` → 后续请求带密钥；带「退出」按钮
 - `src/site.mjs` —— 后台页拆成 `#admin-login`（登录框）+ `#admin-main`（审核界面）两块
 - `scripts/build.mjs` —— `ADMIN_CSS` 补登录框样式 + 移动端适配
 
-**配置**：`wrangler.toml` 的 `[vars]` 里设 `ADMIN_TOKEN`；或控制台加 Secret（更安全，不进仓库）。
+**配置**：`wrangler.toml` 的 `[vars]` 里设 `DC_ADMIN_KEY`；或控制台加 Secret（更安全，不进仓库）。
 
 **本地实测（10 项全通过，2026-09-21）**：
 
 | 测试 | 期望 | 实际 |
 | --- | --- | --- |
 | `/admin/` 页面可访问（门禁在前端） | 200 | ✅ 200 |
-| 无令牌 `login` / `list` / `review` | 401 ×3 | ✅ 401 ×3 |
-| 错令牌 `login` / `list` | 401 ×2 | ✅ 401 ×2 |
-| 对令牌 `login` / `list` | 200 ×2 | ✅ 200 ×2 |
+| 无密钥 `login` / `list` / `review` | 401 ×3 | ✅ 401 ×3 |
+| 错密钥 `login` / `list` | 401 ×2 | ✅ 401 ×2 |
+| 对密钥 `login` / `list` | 200 ×2 | ✅ 200 ×2 |
 | `Authorization: Bearer` 兼容 | 200 | ✅ 200 |
-| 超长令牌（500 字符） | 401 | ✅ 401 |
+| 超长密钥（500 字符） | 401 | ✅ 401 |
 | 前台 6 页不受影响 | 200 ×6 | ✅ 200 ×6 |
 
-**无头浏览器 UI 实测（6 步）**：登录框显示 → 错令牌提示「访问令牌不正确」→ 对令牌进主界面（状态栏、表格正常）→
-刷新免登录（记住令牌）→ 点退出回到登录页且 localStorage 已清 → 移动端 390 宽零溢出。
+**无头浏览器 UI 实测（6 步）**：登录框显示 → 错密钥提示「访问密钥不正确」→ 对密钥进主界面（状态栏、表格正常）→
+刷新免登录（记住密钥）→ 点退出回到登录页且 localStorage 已清 → 移动端 390 宽零溢出。
 
 ### 安全代价（必须知道）
 
 | 项 | 说明 |
 | --- | --- |
-| 无第二因素 | 比 Access 弱（Access 有邮箱验证码）。靠强随机令牌弥补 |
+| 无第二因素 | 比 Access 弱（Access 有邮箱验证码）。靠强随机密钥弥补 |
 | 页面 HTML 公开 | `/admin/` 的登录框 HTML 是公开的，真正的数据在 API 后面。Access 连页面都拦 |
 | 无频率限制 | 登录接口没做失败次数限制。32 位随机串暴力破解不可行，但建议后续加限流 |
-| fail closed | 未配 `ADMIN_TOKEN` 时后台完全进不去 —— 这是刻意的设计，避免裸奔 |
+| fail closed | 未配 `DC_ADMIN_KEY` 时后台完全进不去 —— 这是刻意的设计，避免裸奔 |
 
 ### ⚠️ 历史坑（Access 时代，供回溯）
 
@@ -280,26 +280,26 @@ https://xn--bqr649k.cn/img/trucks/202609/xxxxxxxx.png
 
 ---
 
-### 后台令牌登录实测（2026-09-21，本地）
+### 后台密钥登录实测（2026-09-21，本地）
 
 `wrangler pages dev dist --port 8788` + curl 端到端：
 
 ```
 页面
   /admin/                            200 ✅（登录门禁在前端）
-接口（无令牌，应 401）
+接口（无密钥，应 401）
   /api/admin/login                   401 ✅
   /api/admin/list                    401 ✅
   /api/admin/review                  401 ✅
-接口（错令牌，应 401）
-  /api/admin/login                   401 ✅  → {"ok":false,"msg":"访问令牌不正确"}
+接口（错密钥，应 401）
+  /api/admin/login                   401 ✅  → {"ok":false,"msg":"访问密钥不正确"}
   /api/admin/list                    401 ✅
-接口（对令牌，应 200）
+接口（对密钥，应 200）
   /api/admin/login                   200 ✅
   /api/admin/list                    200 ✅
 兼容性
   Authorization: Bearer <token>      200 ✅
-  超长令牌（500字符）                 401 ✅
+  超长密钥（500字符）                 401 ✅
 前台（应 200，不受影响）
   / /trucks/ /sell/ /rent/ /price/ /guide/   全部 200 ✅
 ```
@@ -307,9 +307,9 @@ https://xn--bqr649k.cn/img/trucks/202609/xxxxxxxx.png
 无头浏览器 UI 流程（6 步，全部通过）：
 ```
 1. 打开 /admin/         → 登录框可见、主界面隐藏        ✅
-2. 输错令牌             → 提示「访问令牌不正确」        ✅
-3. 输对令牌             → 主界面显示、状态栏与表格正常  ✅
-4. 刷新页面             → 免登录（记住令牌）            ✅
+2. 输错密钥             → 提示「访问密钥不正确」        ✅
+3. 输对密钥             → 主界面显示、状态栏与表格正常  ✅
+4. 刷新页面             → 免登录（记住密钥）            ✅
 5. 点「退出」           → 回登录页、localStorage 已清   ✅
 6. 移动端 390 宽        → 文档宽 390/390，零溢出        ✅
 ```
@@ -321,7 +321,7 @@ https://xn--bqr649k.cn/img/trucks/202609/xxxxxxxx.png
 按 `DEPLOY.md` 第 7 节做端到端验证，关键三项：
 
 - 提交一条测试车源 → 前台**看不到**（pending 状态）✅ 本地已实测
-- 访问 `/admin/` → **要求输入访问令牌**（无令牌调 API 返回 401）✅ **本地已实测（10 项全通过）**
+- 访问 `/admin/` → **要求输入访问密钥**（无密钥调 API 返回 401）✅ **本地已实测（10 项全通过）**
 - 后台点「通过」→ 前台能看到 ✅ 本地已实测
 
 ---
@@ -341,7 +341,7 @@ https://xn--bqr649k.cn/img/trucks/202609/xxxxxxxx.png
 | 图片上传 | ✅ 代码完成 + 线上实测通过 |
 | **图片显示（代理方案）** | ✅ **代码完成 + 线上实测通过** |
 | **移动端适配** | ✅ **代码完成 + 线上实测通过（7 页零溢出）** |
-| **后台令牌登录（`ADMIN_TOKEN`）** | ✅ **代码完成 + 本地实测通过（10 项 + UI 6 步）** |
+| **后台密钥登录（`DC_ADMIN_KEY`）** | ✅ **代码完成 + 本地实测通过（10 项 + UI 6 步）** |
 | ~~Access 保护后台~~ | ⚠️ **已废弃**（Pages 自定义域名冲突） |
 | ~~`ADMIN_EMAILS` 白名单~~ | ⚠️ **已废弃**（代码不再读取） |
 | 上传接口鉴权 | ⬜ 待你定策略（可选 Turnstile） |
@@ -353,8 +353,8 @@ https://xn--bqr649k.cn/img/trucks/202609/xxxxxxxx.png
 ### 最终线上验证（2026-09-21）
 
 ```
-后台（改令牌方案后应重新测）
-  xn--bqr649k.cn/api/admin/list       无令牌应 401
+后台（改密钥方案后应重新测）
+  xn--bqr649k.cn/api/admin/list       无密钥应 401
   xn--bqr649k.cn/admin/               200，前端出登录框
 前台（应 200）
   /  /trucks/  /sell/  /rent/  /price/  /guide/   全部 200
@@ -367,11 +367,11 @@ https://xn--bqr649k.cn/img/trucks/202609/xxxxxxxx.png
 浏览器打开 **<https://xn--bqr649k.cn/admin/>**：
 
 1. 页面显示「后台登录」输入框
-2. 填 `ADMIN_TOKEN`（在 `wrangler.toml` 的 `[vars]` 里，或你设的控制台 Secret）
+2. 填 `DC_ADMIN_KEY`（在 `wrangler.toml` 的 `[vars]` 里，或你设的控制台 Secret）
 3. 进入后台，可审核车源
 4. 右上角「退出」可清除登录状态
 
-> 同浏览器登录一次后免登录（令牌存在 localStorage）。换设备/清缓存需重新输。
+> 同浏览器登录一次后免登录（密钥存在 localStorage）。换设备/清缓存需重新输。
 
 #### ⚠️ 必须用 punycode 地址，否则会 522
 
@@ -385,7 +385,7 @@ https://xn--bqr649k.cn/admin/
 
 如果浏览器仍然补成 `www.`，在地址栏输入 `www.吊车.cn` 等下拉提示出现时按 **Shift + Delete** 删掉那条历史记录。
 
-**备用入口**（同一套代码，也需令牌）：
+**备用入口**（同一套代码，也需密钥）：
 
 ```
 https://diaoche-cn.pages.dev/admin/

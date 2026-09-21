@@ -172,15 +172,15 @@ const guideBody = `
 </section>
 `;
 
-/* ---------- 后台审核（令牌登录保护） ---------- */
+/* ---------- 后台审核（访问密钥登录保护） ---------- */
 const adminBody = `
 <section class="wrap sec">
   <div id="admin-login" class="login-box" hidden>
     <h1 class="h1">后台登录</h1>
-    <p class="lead">请输入后台访问令牌。</p>
+    <p class="lead">请输入后台访问密钥。</p>
     <p id="admin-login-msg" class="msg"></p>
     <form id="admin-login-form" class="login-form" autocomplete="off">
-      <input type="password" id="admin-token" placeholder="访问令牌" autocomplete="current-password" required>
+      <input type="password" id="admin-key" placeholder="访问密钥" autocomplete="current-password" required>
       <button type="submit" class="btn">登录</button>
     </form>
   </div>

@@ -17,21 +17,22 @@ bucket_name = "diaoche-images"
 ENV = "production"
 SITE_NAME = "吊车.cn"
 
-# ── 后台访问令牌 ADMIN_TOKEN ──────────────────────────────────────────
-# 刻意不在这里声明！本项目是公开仓库，令牌写进 wrangler.toml 等于公开。
+# ── 后台访问密钥 DC_ADMIN_KEY ─────────────────────────────────────────
+# 刻意不在这里声明！本项目是公开仓库，密钥写进 wrangler.toml 等于公开。
 #
-# ⚠️ 而且只要这里出现 ADMIN_TOKEN 这个名字（哪怕值是空的），
+# ⚠️ 而且只要这里出现某个变量名（哪怕值是空的），CF 侧就会占住这个名字，
 #    控制台就没法再加同名 Secret，会报
 #    "Another variable with this name already exists in this worker."
+#    （历史坑：ADMIN_TOKEN 就是这样被占住的，只能换名才解开）
 #
 # 正确做法 —— 只在这里以外配置，二选一：
 #
 #   控制台：Workers & Pages → diaoche-cn → Settings → Variables and Secrets
-#           → + Add → 类型选 Secret → Name: ADMIN_TOKEN → Value: <你的令牌> → Save
+#           → + Add → 类型选 Secret → Name: DC_ADMIN_KEY → Value: <你的密钥> → Save
 #           → 然后重新部署一次（Deployments → 最新那条 → Retry deployment）
 #
-#   命令行：npx wrangler pages secret put ADMIN_TOKEN --project-name diaoche-cn
+#   命令行：npx wrangler pages secret put DC_ADMIN_KEY --project-name diaoche-cn
 #
-# 生成令牌：node -e "console.log(require('crypto').randomBytes(24).toString('base64url'))"
+# 生成密钥：node -e "console.log(require('crypto').randomBytes(24).toString('base64url'))"
 #
 # ⚠️ 未配置时所有 /api/admin/* 一律 401（fail closed），后台进不去。
