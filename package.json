@@ -10,7 +10,8 @@
     "preview": "npx wrangler pages dev dist",
     "db:init": "npx wrangler d1 execute diaoche-db --file=./schema.sql --remote",
     "db:init:local": "npx wrangler d1 execute diaoche-db --file=./schema.sql --local",
-    "db:pending": "npx wrangler d1 execute diaoche-db --remote --command \"SELECT id, tonnage, brand, contact, status FROM trucks WHERE status='pending'\""
+    "db:pending": "npx wrangler d1 execute diaoche-db --remote --command \"SELECT id, tonnage, brand, contact, status FROM trucks WHERE status='pending'\"",
+    "article:daily": "node --use-system-ca scripts/bot/run.mjs"
   },
   "devDependencies": {
     "wrangler": "^4.135.0"

@@ -11,9 +11,30 @@ import path from 'node:path';
 
 export const DEFAULT_CONFIG_PATH = 'config/article-bot.json';
 
+/**
+ * 本地密钥兜底：config/local.secrets.json（已在 .gitignore，绝不进仓库）。
+ * 存在的意义是让定时任务无需在命令行里带 PAT —— 命令行参数会出现在
+ * 进程列表和 shell 历史里。优先级仍是：环境变量 > 本地文件。
+ */
+let FILE_SECRETS = null;
+const SECRETS_FILE = 'config/local.secrets.json';
+
+async function loadFileSecrets(repoRoot) {
+  if (FILE_SECRETS) return FILE_SECRETS;
+  FILE_SECRETS = {};
+  try {
+    const raw = await readFile(path.join(repoRoot, SECRETS_FILE), 'utf8');
+    const j = JSON.parse(raw);
+    if (j && typeof j === 'object') FILE_SECRETS = j;
+  } catch {
+    // 没有这个文件是正常的（CI 走 Secrets），不报错
+  }
+  return FILE_SECRETS;
+}
+
 /** 读环境变量占位。`${ENV}` 形式也支持，方便配置里直接写死变量名。 */
 function env(name) {
-  return process.env[name] ?? '';
+  return process.env[name] ?? FILE_SECRETS?.[name] ?? '';
 }
 
 function resolve(cfgObj, override) {
@@ -25,6 +46,7 @@ function resolve(cfgObj, override) {
 }
 
 export async function loadConfig(configPath = process.env.ARTICLE_BOT_CONFIG || DEFAULT_CONFIG_PATH, repoRoot = process.cwd()) {
+  await loadFileSecrets(repoRoot);
   const abs = path.isAbsolute(configPath) ? configPath : path.join(repoRoot, configPath);
   let raw;
   try {

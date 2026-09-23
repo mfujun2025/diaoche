@@ -1,12 +1,13 @@
-name: 每日文章
+name: 每日文章（手动）
 
-# 每天北京时间 09:00 自动生成并发布一篇吊车文章。
-# ⚠️ GitHub Actions 的 cron 用 UTC：0 1 * * * = 北京时间 09:00。
-#    改时间要同时改这里和 config/article-bot.json 的 schedule.cron（两者保持一致）。
+# ⚠️ 定时已关闭 —— 日常日更交给 WorkBuddy 的「吊车.cn 每日文章」定时任务
+#    （每天 09:00，人工撰稿 + --from-file 发布）。两边都开会导致一天发两篇。
+#
+# 这里保留手动触发，用于「LLM 密钥配好之后想让机器人全自动生成」的场景：
+# Actions 页面点 Run workflow 即可。真要改成定时，把下面的 schedule 加回来，
+# 同时把 WorkBuddy 那个定时任务停掉（cron 用 UTC：0 1 * * * = 北京时间 09:00）。
 
 on:
-  schedule:
-    - cron: '0 1 * * *'
   workflow_dispatch:
     inputs:
       dry_run:

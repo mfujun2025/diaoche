@@ -26,3 +26,4 @@ out/
 
 # 人工投稿稿件的暂存目录（--from-file 用，不进仓库）
 manuscripts/
+config/local.secrets.json
